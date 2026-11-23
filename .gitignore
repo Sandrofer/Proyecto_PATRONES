@@ -1,0 +1,9 @@
+bin/
+obj/
+.vs/
+*.user
+docker/.env
+docker/setup/output/
+**/appsettings.Local.json
+TestResults/
+*.log

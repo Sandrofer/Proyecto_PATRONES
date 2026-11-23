@@ -1,0 +1,30 @@
+@page "/login"
+@inject LoginUseCase Login
+@inject NavigationManager Nav
+
+<PageTitle>Iniciar sesión</PageTitle>
+
+<div class="login">
+    <form class="panel" @onsubmit="SubmitAsync">
+        <h2>Iniciar sesión</h2>
+        <label>Usuario <input @bind="username" autocomplete="username" /></label>
+        <label>Contraseña <input type="password" @bind="password" autocomplete="current-password" /></label>
+        <Alert Message="@error" />
+        <button type="submit" class="btn primary" disabled="@busy">@(busy ? "Ingresando…" : "Ingresar")</button>
+    </form>
+</div>
+
+@code {
+    string username = "", password = "";
+    string? error;
+    bool busy;
+
+    async Task SubmitAsync()
+    {
+        busy = true;
+        error = await Login.ExecuteAsync(username, password);
+        busy = false;
+        if (error is null)
+            Nav.NavigateTo("");
+    }
+}

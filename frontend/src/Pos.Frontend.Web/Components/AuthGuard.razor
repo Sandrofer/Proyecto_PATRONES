@@ -1,0 +1,17 @@
+@inject IAuthSession Auth
+@inject NavigationManager Nav
+
+@if (Auth.IsAuthenticated)
+{
+    @ChildContent
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (!Auth.IsAuthenticated)
+            Nav.NavigateTo("login");
+    }
+}

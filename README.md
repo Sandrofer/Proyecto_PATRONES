@@ -1,0 +1,130 @@
+# POS integrado con Odoo 20 Community
+
+Proyecto integrador de **Patrones de Software**. Punto de venta web para una cafetería:
+
+```
+Navegador (Blazor WebAssembly) ──HTTP──►  API REST .NET 10  ──JSON-2──►  Odoo 20 Community (Docker)
+   computadora FRONTEND                    computadora BACKEND             computadora BACKEND
+```
+
+El frontend **nunca** habla con Odoo; la API key de Odoo solo existe en el backend.
+
+## Estructura
+
+| Carpeta | Contenido |
+|---|---|
+| `backend/src/Pos.Domain` | Venta (agregado), líneas, impuestos, políticas de descuento (Strategy). Sin dependencias. |
+| `backend/src/Pos.Application` | Casos de uso (input ports + interactors) y puertos de salida (`IPosGateway`, `IIdempotencyStore`…). |
+| `backend/src/Pos.Infrastructure` | Adaptador de Odoo JSON-2, idempotencia, JWT, operadores. |
+| `backend/src/Pos.Api` | Endpoints REST, ProblemDetails, CORS, composición (DI). |
+| `backend/src/Pos.Shared` | Contratos (DTOs) compartidos con el frontend. |
+| `frontend/src/Pos.Frontend.Domain` | Carrito y total provisional (C# puro). |
+| `frontend/src/Pos.Frontend.Application` | Casos de uso del frontend (login, checkout) y puerto `IPosApi`. |
+| `frontend/src/Pos.Frontend.Infrastructure` | `HttpPosApi` (único lugar que conoce HTTP), sesión del navegador. |
+| `frontend/src/Pos.Frontend.Web` | Páginas Blazor (presentación). |
+| `docker/` | `docker-compose.yml` (Odoo 20 + PostgreSQL) y `setup/setup_pos.py`. |
+| `scripts/` | Scripts de preparación y arranque. |
+| `docs/decisiones-diseno.md` | Registro de decisiones de diseño (patrones). |
+
+## Requisitos previos
+
+- **Backend:** Windows 10/11, [.NET SDK 10](https://dotnet.microsoft.com/download), Docker Desktop.
+- **Frontend:** .NET SDK 10 y un navegador moderno.
+- Ambas computadoras en la **misma red** (misma Wi-Fi o cable). Copie el repositorio completo en las dos.
+
+## Computadora BACKEND (una sola vez)
+
+```powershell
+cd C:\dev\pos-odoo
+.\scripts\odoo-setup.ps1                                   # Odoo + datos + API key (tarda ~3 min la 1.ª vez)
+.\scripts\add-operator.ps1 -Username cajero1 -DisplayName "Cajero 1"   # pide la contraseña
+```
+
+`odoo-setup.ps1` crea (sin duplicar si se repite): impuesto **IVA 15 %**, 4 productos vendibles
+(+1 retirado para la prueba P04) con stock, método de pago **Efectivo**, el punto de venta
+**Cafetería - Caja 1**, una **sesión abierta**, el usuario de integración `pos_integration`
+y su **API key** (scope `rpc`), que guarda en `dotnet user-secrets` (fuera del repositorio).
+
+Firewall (una vez, PowerShell **como administrador**):
+
+```powershell
+New-NetFirewallRule -DisplayName "POS API 5100" -Direction Inbound -Protocol TCP -LocalPort 5100 -Action Allow -Profile Private,Domain
+```
+
+## Arranque para la presentación
+
+**Backend:**
+```powershell
+.\scripts\backend-start.ps1
+```
+Muestra la IP que debe usar el frontend, por ejemplo `http://192.168.1.20:5100`.
+
+**Frontend** (la otra computadora):
+```powershell
+.\scripts\frontend-start.ps1 -ApiUrl http://192.168.1.20:5100
+```
+Abra **http://localhost:5200** e inicie sesión con el cajero creado.
+
+Odoo (administración): `http://IP-BACKEND:8069`. Si la sesión POS se cerró en Odoo, vuelva a
+ejecutar `.\scripts\odoo-setup.ps1` (abre una sesión nueva).
+
+## Variables de configuración (backend)
+
+| Clave | Dónde | Descripción |
+|---|---|---|
+| `Odoo:BaseUrl` | appsettings.json | `http://localhost:8069` |
+| `Odoo:Database` | appsettings.json | `pos` |
+| `Odoo:ApiKey` | **user-secrets** | API key del usuario de integración |
+| `Odoo:PosConfigId` | user-secrets | id del punto de venta |
+| `Jwt:SigningKey` | **user-secrets** | clave de firma de los tokens (≥ 32 caracteres) |
+| `Operators:Accounts` | **user-secrets** | cajeros (solo hash PBKDF2 de la contraseña) |
+| `Cors:AllowedOrigins` | appsettings.json | `["*"]` o la URL del frontend |
+| `Discounts:*` | appsettings.json | máximo manual, % estudiante, volumen |
+
+Cualquier clave puede darse también como variable de entorno (`Odoo__ApiKey`, etc.).
+`docker/.env` (contraseña de PostgreSQL) se genera solo y está en `.gitignore`.
+
+## API REST
+
+| Método | Ruta | Propósito |
+|---|---|---|
+| POST | `/api/auth/login` | Login del cajero → JWT |
+| GET | `/api/products?search=` | Catálogo (nombre, código o código de barras) |
+| GET | `/api/pos/sessions/active` | Sesión POS abierta y métodos de pago |
+| GET | `/api/discount-policies` | Políticas de descuento habilitadas |
+| POST | `/api/sales/quote` | Total verificado con precios/impuestos de Odoo (no registra) |
+| POST | `/api/sales` | Registra venta + pago en efectivo. Cabecera **`Idempotency-Key`** obligatoria |
+| GET | `/api/sales` | Historial |
+| GET | `/api/sales/{id}` | Detalle |
+
+Respuestas de `POST /api/sales`: **201** registrada · **200** ya estaba registrada (misma clave) ·
+**202** resultado incierto (Odoo no respondió: reintentar con la misma clave) · **400** datos
+inválidos · **409** la misma operación está en curso · **502/503** Odoo rechazó / no disponible.
+Errores en formato ProblemDetails, en español.
+
+## Pruebas
+
+```powershell
+cd backend;  dotnet test tests\Pos.UnitTests                 # 38 pruebas: dominio, casos de uso, adaptador Odoo, arquitectura
+cd frontend; dotnet test tests\Pos.Frontend.UnitTests        # 12 pruebas: carrito (P07), errores de la API (P08), checkout
+
+# P09 con Odoo REAL (crea 1 venta en Odoo):
+cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
+```
+
+| ID | Prueba | Dónde |
+|---|---|---|
+| P01 | Venta sin productos | `SaleTests`, `RegisterSaleInteractorTests` |
+| P02 | Cantidad cero o negativa | `SaleTests`, `RegisterSaleInteractorTests` |
+| P03 | Sesión POS cerrada / inexistente | `RegisterSaleInteractorTests` |
+| P04 | Producto no habilitado; no se envía a Odoo | `SaleTests`, `RegisterSaleInteractorTests` |
+| P05 | Error / timeout de Odoo sin declarar éxito | `RegisterSaleInteractorTests` |
+| P06 | Repetición y concurrencia sin segunda venta | `RegisterSaleInteractorTests` |
+| P07 | Carrito, cantidades, total provisional | `frontend/.../CartTests` |
+| P08 | Error comprensible si falla la API | `frontend/.../ApiErrorAndCheckoutTests` |
+| P09 | Venta real de 2 productos en efectivo | `Pos.IntegrationTests` |
+| P10 | Nueva política de descuento sin tocar otros componentes | `DiscountExtensibilityTests` |
+
+Verificación manual realizada contra Odoo 20 (`20.0-20261112`): venta registrada como `paid`,
+pago en efectivo, stock descontado, reenvío con la misma clave (también tras reiniciar la API)
+sin duplicar, dos peticiones simultáneas (una recibe 409) y Odoo apagado (503, sin éxito falso).

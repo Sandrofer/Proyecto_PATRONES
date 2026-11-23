@@ -1,0 +1,284 @@
+@page "/"
+@inject IPosApi Api
+@inject CheckoutUseCase Checkout
+@inject IAuthSession Auth
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>Punto de venta</PageTitle>
+
+<AuthGuard>
+    <div class="pos-grid">
+        <section class="panel">
+            <header class="panel-head">
+                <h2>Productos</h2>
+                @if (session is not null)
+                {
+                    <span class="badge ok">Sesión @session.Name abierta</span>
+                }
+                else if (sessionError is not null)
+                {
+                    <span class="badge error">@sessionError</span>
+                }
+            </header>
+
+            <form class="search" @onsubmit="SearchAsync">
+                <input @bind="search" placeholder="Buscar por nombre o código…" aria-label="Buscar producto" />
+                <button type="submit" class="btn" disabled="@searching">Buscar</button>
+            </form>
+
+            <Alert Message="@catalogError" />
+
+            @if (searching)
+            {
+                <p class="muted">Consultando Odoo…</p>
+            }
+            else if (products.Count == 0)
+            {
+                <p class="muted">No hay productos que coincidan.</p>
+            }
+            else
+            {
+                <table class="table">
+                    <thead><tr><th></th><th>Producto</th><th>Código</th><th class="num">Precio</th><th class="num">IVA</th><th class="num">Disponible</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var p in products)
+                        {
+                            <tr>
+                                <td>@if (p.ImageDataUrl is not null) { <img class="thumb" src="@p.ImageDataUrl" alt="" /> } else { <span class="thumb"></span> }</td>
+                                <td>@p.Name</td>
+                                <td class="muted">@(p.Code ?? "—")</td>
+                                <td class="num">@p.UnitPrice.ToString("N2")</td>
+                                <td class="num">@p.TaxPercent.ToString("0.##") %@(p.TaxIncludedInPrice ? " incl." : "")</td>
+                                <td class="num">@(p.QuantityAvailable?.ToString("0.##") ?? "s/d")</td>
+                                <td><button class="btn small" disabled="@Locked" @onclick="() => Add(p)">Agregar</button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+
+        <section class="panel">
+            <header class="panel-head"><h2>Venta en preparación</h2></header>
+
+            @if (Checkout.Cart.IsEmpty)
+            {
+                <p class="muted">El carrito está vacío.</p>
+            }
+            else
+            {
+                <table class="table">
+                    <thead><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Subtotal</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var line in Checkout.Cart.Lines)
+                        {
+                            <tr>
+                                <td>@line.Product.Name<div class="muted small">@line.Product.UnitPrice.ToString("N2") c/u</div></td>
+                                <td class="num">
+                                    <input type="number" min="1" step="1" class="qty" value="@line.Quantity" disabled="@Locked"
+                                           @onchange="e => ChangeQuantity(line.Product.Id, e.Value)" aria-label="Cantidad" />
+                                </td>
+                                <td class="num">@((quote?.Lines.FirstOrDefault(q => q.ProductId == line.Product.Id)?.SubtotalWithTax ?? line.Subtotal).ToString("N2"))</td>
+                                <td><button class="btn small danger" disabled="@Locked" @onclick="() => Remove(line.Product.Id)" aria-label="Quitar">✕</button></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            <Alert Message="@cartError" />
+
+            <div class="field-row">
+                <label>Descuento
+                    <select value="@Checkout.DiscountPolicyCode" disabled="@Locked" @onchange="ChangePolicy">
+                        @foreach (var policy in policies)
+                        {
+                            <option value="@policy.Code">@policy.Description</option>
+                        }
+                    </select>
+                </label>
+                @if (SelectedPolicy?.RequiresPercent == true)
+                {
+                    <label>Porcentaje
+                        <input type="number" min="0" step="0.5" class="qty" disabled="@Locked"
+                               value="@Checkout.DiscountPercent" @onchange="ChangePercent" />
+                    </label>
+                }
+            </div>
+
+            <div class="field-row">
+                <label>Método de pago
+                    <select @bind="paymentMethodId" disabled="@Locked">
+                        <option value="0">Seleccione…</option>
+                        @foreach (var m in session?.PaymentMethods ?? [])
+                        {
+                            <option value="@m.Id" disabled="@(!m.IsCash)">@m.Name@(m.IsCash ? "" : " (no admitido)")</option>
+                        }
+                    </select>
+                </label>
+            </div>
+
+            <div class="totals">
+                @{ var provisional = Checkout.Cart.CalculateTotals(quote?.DiscountPercent ?? 0); }
+                <div><span>Subtotal</span><span>@(quote?.AmountUntaxed.ToString("N2") ?? provisional.Untaxed.ToString("N2"))</span></div>
+                <div><span>Impuestos</span><span>@(quote?.AmountTax.ToString("N2") ?? provisional.Tax.ToString("N2"))</span></div>
+                @if (quote is { DiscountPercent: > 0 })
+                {
+                    <div><span>Descuento aplicado</span><span>@quote.DiscountPercent.ToString("0.##") %</span></div>
+                }
+                <div class="grand"><span>Total @(quote is null ? "(provisional)" : "(verificado)")</span>
+                    <span>@(quote?.AmountTotal.ToString("N2") ?? provisional.Total.ToString("N2"))</span></div>
+            </div>
+
+            <Alert Message="@checkoutMessage" Kind="@checkoutKind" />
+
+            <div class="actions">
+                @if (Checkout.PendingOperation is not null)
+                {
+                    <button class="btn primary" disabled="@busy" @onclick="ConfirmAsync">Reintentar</button>
+                    <button class="btn" disabled="@busy" @onclick="Discard">Descartar</button>
+                }
+                else
+                {
+                    <button class="btn" disabled="@(busy || Checkout.Cart.IsEmpty)" @onclick="QuoteAsync">Verificar total</button>
+                    <button class="btn primary" disabled="@(busy || Checkout.Cart.IsEmpty || session is null)" @onclick="ConfirmAsync">
+                        @(busy ? "Registrando…" : "Confirmar venta")
+                    </button>
+                }
+            </div>
+
+            @if (lastRegistration is { OrderId: not null })
+            {
+                <div class="receipt">
+                    <strong>Venta @lastRegistration.OrderName</strong> · id @lastRegistration.OrderId ·
+                    estado <em>@lastRegistration.State</em> · total @lastRegistration.AmountTotal?.ToString("N2")
+                    <a href="sales/@lastRegistration.OrderId">Ver detalle</a>
+                </div>
+            }
+        </section>
+    </div>
+</AuthGuard>
+
+@code {
+    string? search;
+    bool searching, busy;
+    List<ProductDto> products = [];
+    List<DiscountPolicyDto> policies = [];
+    PosSessionDto? session;
+    SaleQuoteDto? quote;
+    SaleRegistrationDto? lastRegistration;
+    int paymentMethodId;
+    string? sessionError, catalogError, cartError, checkoutMessage;
+    string checkoutKind = "error";
+
+    bool Locked => busy || Checkout.PendingOperation is not null;
+    DiscountPolicyDto? SelectedPolicy => policies.FirstOrDefault(p => p.Code == Checkout.DiscountPolicyCode);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Checkout.Cart.Changed += OnCartChanged;
+        if (!Auth.IsAuthenticated) return;
+
+        var sessionTask = Api.GetActiveSessionAsync();
+        var policiesTask = Api.GetDiscountPoliciesAsync();
+        await SearchAsync();
+
+        var s = await sessionTask;
+        session = s.Value;
+        sessionError = s.IsSuccess ? null : s.Error;
+        paymentMethodId = session?.PaymentMethods.FirstOrDefault(m => m.IsCash)?.Id ?? 0;
+
+        var p = await policiesTask;
+        policies = p.Value?.ToList() ?? [];
+    }
+
+    async Task SearchAsync()
+    {
+        searching = true;
+        var result = await Api.SearchProductsAsync(search);
+        products = result.Value?.ToList() ?? [];
+        catalogError = result.IsSuccess ? null : result.Error;
+        searching = false;
+    }
+
+    void Add(ProductDto p) => Run(() => Checkout.Cart.Add(p.ToCartProduct()));
+    void Remove(int productId) => Run(() => Checkout.Cart.Remove(productId));
+
+    void ChangeQuantity(int productId, object? value)
+    {
+        if (!decimal.TryParse(value?.ToString(), System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture, out var qty) || qty <= 0)
+        {
+            cartError = "La cantidad debe ser un número mayor que cero.";
+            return;
+        }
+        Run(() => Checkout.Cart.SetQuantity(productId, qty));
+    }
+
+    void ChangePolicy(ChangeEventArgs e)
+    {
+        Checkout.DiscountPolicyCode = e.Value?.ToString() ?? "NONE";
+        Checkout.DiscountPercent = null;
+        quote = null;
+    }
+
+    void ChangePercent(ChangeEventArgs e)
+    {
+        Checkout.DiscountPercent = decimal.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Number,
+            System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : null;
+        quote = null;
+    }
+
+    void Run(Action action)
+    {
+        try
+        {
+            action();
+            cartError = null;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            cartError = ex.Message;
+        }
+    }
+
+    async Task QuoteAsync()
+    {
+        busy = true;
+        var result = await Checkout.QuoteAsync(paymentMethodId);
+        quote = result.Value;
+        (checkoutMessage, checkoutKind) = result.IsSuccess ? ("Total verificado con los precios de Odoo.", "ok") : (result.FullError, "error");
+        busy = false;
+    }
+
+    async Task ConfirmAsync()
+    {
+        busy = true;
+        checkoutMessage = null;
+        var result = await Checkout.ConfirmAsync(paymentMethodId);
+        checkoutMessage = result.Message;
+        checkoutKind = result.Success ? "ok" : result.Uncertain ? "warn" : "error";
+        if (result.Success)
+        {
+            lastRegistration = result.Registration;
+            quote = null;
+            await SearchAsync();
+        }
+        busy = false;
+    }
+
+    void Discard()
+    {
+        Checkout.Reset();
+        checkoutMessage = "Operación descartada. Revise el historial antes de volver a cobrar.";
+        checkoutKind = "warn";
+    }
+
+    void OnCartChanged()
+    {
+        quote = null;
+        StateHasChanged();
+    }
+
+    public void Dispose() => Checkout.Cart.Changed -= OnCartChanged;
+}

@@ -1,0 +1,64 @@
+@page "/sales"
+@inject IPosApi Api
+
+<PageTitle>Historial de ventas</PageTitle>
+
+<AuthGuard>
+    <section class="panel">
+        <header class="panel-head">
+            <h2>Historial de ventas (Odoo)</h2>
+            <button class="btn small" @onclick="LoadAsync" disabled="@loading">Actualizar</button>
+        </header>
+        <input class="filter" @bind="filter" @bind:event="oninput" placeholder="Buscar por número de comprobante…" aria-label="Buscar venta" />
+        <Alert Message="@error" />
+        @if (loading)
+        {
+            <p class="muted">Consultando Odoo…</p>
+        }
+        else if (Filtered.Count == 0)
+        {
+            <p class="muted">No hay ventas que mostrar.</p>
+        }
+        else
+        {
+            <table class="table">
+                <thead><tr><th>Comprobante</th><th>Fecha</th><th>Sesión</th><th>Estado</th><th class="num">Total</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var s in Filtered)
+                    {
+                        <tr>
+                            <td>@s.Name</td>
+                            <td>@s.DateOrderUtc.ToLocalTime().ToString("g")</td>
+                            <td class="muted">@s.SessionName</td>
+                            <td><span class="badge">@s.State</span></td>
+                            <td class="num">@s.AmountTotal.ToString("N2")</td>
+                            <td><a href="sales/@s.Id">Detalle</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+</AuthGuard>
+
+@code {
+    List<SaleSummaryDto> sales = [];
+    string? error, filter;
+    bool loading;
+
+    List<SaleSummaryDto> Filtered => string.IsNullOrWhiteSpace(filter)
+        ? sales
+        : sales.Where(s => s.Name.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase)
+                           || s.Id.ToString() == filter.Trim()).ToList();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    async Task LoadAsync()
+    {
+        loading = true;
+        var result = await Api.GetSalesAsync();
+        sales = result.Value?.ToList() ?? [];
+        error = result.IsSuccess ? null : result.Error;
+        loading = false;
+    }
+}

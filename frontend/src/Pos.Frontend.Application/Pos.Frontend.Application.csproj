@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Use cases: no Blazor, no HttpClient (RNF-02). -->
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Pos.Frontend.Domain\Pos.Frontend.Domain.csproj" />
+    <ProjectReference Include="..\..\..\backend\src\Pos.Shared\Pos.Shared.csproj" />
+  </ItemGroup>
+</Project>

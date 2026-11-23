@@ -1,0 +1,28 @@
+@inherits LayoutComponentBase
+@inject IAuthSession Auth
+@inject CheckoutUseCase Checkout
+@inject NavigationManager Nav
+
+<header class="topbar">
+    <span class="brand">☕ POS · Odoo 20</span>
+    @if (Auth.IsAuthenticated)
+    {
+        <nav>
+            <NavLink href="" Match="NavLinkMatch.All">Vender</NavLink>
+            <NavLink href="sales">Historial</NavLink>
+        </nav>
+        <span class="user">@Auth.OperatorName <button class="btn small" @onclick="LogoutAsync">Salir</button></span>
+    }
+</header>
+<main class="content">
+    @Body
+</main>
+
+@code {
+    async Task LogoutAsync()
+    {
+        Checkout.Reset();
+        await Auth.SignOutAsync();
+        Nav.NavigateTo("login");
+    }
+}

@@ -1,0 +1,34 @@
+# Odoo 20 Community + PostgreSQL for the POS project.
+# Usage (from this folder):  docker compose up -d
+# Passwords come from docker/.env (copy .env.example; .env is not committed).
+services:
+  db:
+    image: postgres:17
+    container_name: pos-odoo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD in docker/.env}
+    volumes:
+      - pos-odoo-db:/var/lib/postgresql/data
+    # PostgreSQL is NOT published: only Odoo can reach it (the .NET API must not).
+
+  odoo:
+    image: odoo:20
+    container_name: pos-odoo-web
+    restart: unless-stopped
+    depends_on: [db]
+    ports:
+      - "8069:8069"
+    environment:
+      HOST: db
+      USER: odoo
+      PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pos-odoo-data:/var/lib/odoo
+      - ./setup:/mnt/setup:ro
+
+volumes:
+  pos-odoo-db:
+  pos-odoo-data:
