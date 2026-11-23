@@ -162,6 +162,10 @@ cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
   la búsqueda de productos y el filtro del historial solo admiten letras (con tildes y ñ), números,
   espacios y `- . _ /` (máx. 50); el usuario del login solo letras, números y `. _ - @`. Con otros
   caracteres (`!"#*<>%'`...) la API responde 400 sin consultar Odoo.
+  En la pantalla esos caracteres **ni siquiera se pueden escribir ni pegar**
+  (`wwwroot/js/input-filter.js`): cada casilla declara qué acepta (`data-allow`: números,
+  decimal, búsqueda, usuario o nombre), el carácter no entra y aparece un aviso breve; al pegar
+  se conservan solo los caracteres válidos. La contraseña no se filtra: puede tener símbolos.
 - **Descuentos (RF-06/07/08, RN-04).** Solo políticas habilitadas, cada una con sus condiciones:
   - *Manual*: número mayor que 0, hasta el máximo autorizado (10 %), con 2 decimales como máximo.
   - *Volumen*: solo si la compra (antes del descuento) llega a $ 100.

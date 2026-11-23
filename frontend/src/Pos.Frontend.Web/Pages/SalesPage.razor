@@ -20,7 +20,7 @@
         </header>
         <div class="search">
             <Icon Name="search" Class="search-icon" />
-            <input @bind="filter" @bind:event="oninput" maxlength="@InputRules.MaxSearchLength" placeholder="Buscar por comprobante, cliente o cajero…" aria-label="Buscar venta" />
+            <input @bind="filter" @bind:event="oninput" data-allow="search" maxlength="@InputRules.MaxSearchLength" placeholder="Buscar por comprobante, cliente o cajero…" aria-label="Buscar venta" />
         </div>
         <Alert Message="@FilterError" Kind="warn" />
         <Alert Message="@error" />

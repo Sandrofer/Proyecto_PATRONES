@@ -280,3 +280,12 @@ input.invalid { border-color: var(--err); background: var(--err-bg); }
   .r-sub { font-size: 10px; }
   .r-note { font-size: 9px; margin-top: 6px; }
 }
+
+/* Character filter feedback (wwwroot/js/input-filter.js) */
+input.char-rejected { animation: char-shake .3s; border-color: var(--err) !important; }
+@keyframes char-shake { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+.char-tip { position: absolute; z-index: 1000; max-width: 280px; padding: 6px 10px; border-radius: var(--radius-sm);
+            background: var(--err); color: #fff; font-size: .8rem; box-shadow: var(--shadow);
+            opacity: 0; transform: translateY(-4px); transition: opacity .15s, transform .15s; pointer-events: none; }
+.char-tip.show { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { input.char-rejected { animation: none; } }

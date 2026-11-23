@@ -28,7 +28,7 @@
 
             <form class="search" @onsubmit="SearchAsync">
                 <Icon Name="search" Class="search-icon" />
-                <input @bind="search" maxlength="@InputRules.MaxSearchLength" placeholder="Buscar por nombre o código…" aria-label="Buscar producto" />
+                <input @bind="search" data-allow="search" maxlength="@InputRules.MaxSearchLength" placeholder="Buscar por nombre o código…" aria-label="Buscar producto" />
                 <button type="submit" class="btn" disabled="@searching">Buscar</button>
             </form>
 
@@ -114,7 +114,7 @@
                             <div class="stepper">
                                 <button class="icon-btn" disabled="@(Locked || qty <= 1)" aria-label="Restar"
                                         @onclick="() => Run(() => Checkout.Cart.SetQuantity(pid, qty - 1))"><Icon Name="minus" Size="14" /></button>
-                                <input @key="(pid, qtyRender)" inputmode="numeric" maxlength="4" value="@qty" disabled="@Locked"
+                                <input @key="(pid, qtyRender)" data-allow="digits" inputmode="numeric" maxlength="4" value="@qty" disabled="@Locked"
                                        @onchange="e => ChangeQuantity(pid, e.Value)" aria-label="Cantidad" />
                                 <button class="icon-btn" disabled="@(Locked || Pos.Frontend.Domain.Cart.RemainingStock(line.Product, qty) is <= 0)" aria-label="Sumar"
                                         @onclick="() => Run(() => Checkout.Cart.SetQuantity(pid, qty + 1))"><Icon Name="plus" Size="14" /></button>
@@ -138,12 +138,12 @@
                     <div class="form-grid tight">
                         <label class="field">
                             <span>Cédula</span>
-                            <input value="@Checkout.CustomerIdentification" inputmode="numeric" maxlength="10" placeholder="1710034065"
+                            <input value="@Checkout.CustomerIdentification" data-allow="digits" inputmode="numeric" maxlength="10" placeholder="1710034065"
                                    disabled="@Locked" class="@CedulaClass" @onchange="ChangeCedulaAsync" />
                         </label>
                         <label class="field">
                             <span>Nombre</span>
-                            <input value="@Checkout.CustomerName" placeholder="Nombre y apellido" maxlength="@InputRules.MaxNameLength" disabled="@Locked"
+                            <input value="@Checkout.CustomerName" data-allow="name" placeholder="Nombre y apellido" maxlength="@InputRules.MaxNameLength" disabled="@Locked"
                                    @onchange="ChangeCustomerName" />
                         </label>
                     </div>
@@ -169,7 +169,7 @@
                 {
                     <label class="field">
                         <span>Porcentaje</span>
-                        <input inputmode="decimal" maxlength="5" placeholder="@($"0 – {SelectedPolicy.MaxPercent:0.##}")" disabled="@Locked"
+                        <input data-allow="decimal" inputmode="decimal" maxlength="5" placeholder="@($"0 – {SelectedPolicy.MaxPercent:0.##}")" disabled="@Locked"
                                value="@Checkout.DiscountPercent" @onchange="ChangePercent" />
                     </label>
                 }
@@ -191,7 +191,7 @@
                 <div class="cash">
                     <label class="field">
                         <span>Efectivo recibido</span>
-                        <input inputmode="decimal" maxlength="8" placeholder="Monto exacto" disabled="@Locked"
+                        <input data-allow="decimal" inputmode="decimal" maxlength="8" placeholder="Monto exacto" disabled="@Locked"
                                class="@(CashError is null ? "" : "invalid")"
                                value="@tenderedText"
                                @onchange="ChangeTendered" />
