@@ -1,6 +1,9 @@
 @inherits LayoutComponentBase
+@implements IDisposable
 @inject IAuthSession Auth
 @inject CheckoutUseCase Checkout
+@inject ConnectivityState Connectivity
+@inject SystemStatusUseCase SystemStatus
 @inject NavigationManager Nav
 
 @if (Auth.IsAuthenticated)
@@ -15,6 +18,9 @@
             <NavLink href="sales"><Icon Name="history" /> Historial</NavLink>
         </nav>
         <div class="user">
+            <button class="conn @ConnClass" title="@(Connectivity.Message ?? "Comprobando la conexión con Odoo…")" @onclick="CheckNowAsync">
+                <span class="dot"></span><span class="hide-sm">@ConnLabel</span>
+            </button>
             <span class="avatar">@Ui.Initials(Auth.OperatorName ?? "?")</span>
             <span class="user-name">@Auth.OperatorName</span>
             <button class="btn ghost-light small" @onclick="LogoutAsync" title="Cerrar sesión">
@@ -22,16 +28,137 @@
             </button>
         </div>
     </header>
+
+    @if (Connectivity.Status is ConnectionStatus.OdooDown or ConnectionStatus.ApiDown or ConnectionStatus.NoSession)
+    {
+        <div class="outage @(Connectivity.Status == ConnectionStatus.NoSession ? "warn" : "down")" role="alert">
+            <div class="outage-text">
+                <strong>@OutageTitle</strong>
+                <span>@Connectivity.Message</span>
+                <span class="small">
+                    @if (Connectivity.Status != ConnectionStatus.NoSession)
+                    {
+                        <text>Puede seguir consultando y armando la venta; el cobro se habilita solo cuando vuelva la conexión. </text>
+                    }
+                    @if (Connectivity.DownSinceUtc is DateTime since)
+                    {
+                        <text>Sin conexión desde las @since.ToLocalTime().ToString("HH:mm:ss"). </text>
+                    }
+                    Reintentando cada @((int)SystemStatusUseCase.DownInterval.TotalSeconds) s@(Connectivity.LastCheckUtc is DateTime last ? $" · último intento {last.ToLocalTime():HH:mm:ss}" : "").
+                </span>
+            </div>
+            <button class="btn small" disabled="@checking" @onclick="CheckNowAsync">
+                @if (checking) { <span class="spinner dark"></span> } else { <Icon Name="refresh" /> } Reintentar ahora
+            </button>
+        </div>
+    }
+    else if (Connectivity.JustRecovered)
+    {
+        <div class="outage ok" role="status">
+            <div class="outage-text">
+                <strong>Conexión con Odoo restablecida.</strong>
+                <span>
+                    @if (Checkout.PendingOperation is not null)
+                    {
+                        <text>Tiene un cobro pendiente: pulse «Reintentar» en el carrito. No se duplicará.</text>
+                    }
+                    else
+                    {
+                        <text>Ya puede cobrar normalmente.</text>
+                    }
+                </span>
+            </div>
+            <button class="btn small" @onclick="Connectivity.AcknowledgeRecovery">Entendido</button>
+        </div>
+    }
 }
 <main class="@(Auth.IsAuthenticated ? "content" : "content bare")">
     @Body
 </main>
 
 @code {
+    readonly CancellationTokenSource stop = new();
+    bool checking;
+
+    string ConnClass => Connectivity.Status switch
+    {
+        ConnectionStatus.Online => "online",
+        ConnectionStatus.NoSession => "warn",
+        ConnectionStatus.OdooDown or ConnectionStatus.ApiDown => "down",
+        _ => ""
+    };
+
+    string ConnLabel => Connectivity.Status switch
+    {
+        ConnectionStatus.Online => "Odoo conectado",
+        ConnectionStatus.NoSession => "Caja cerrada",
+        ConnectionStatus.OdooDown => "Odoo sin conexión",
+        ConnectionStatus.ApiDown => "API sin conexión",
+        _ => "Comprobando…"
+    };
+
+    string OutageTitle => Connectivity.Status switch
+    {
+        ConnectionStatus.OdooDown => "Odoo no está disponible.",
+        ConnectionStatus.ApiDown => "Sin conexión con el servidor del POS.",
+        _ => "La caja está cerrada."
+    };
+
+    protected override void OnInitialized()
+    {
+        Connectivity.Changed += OnConnectivityChanged;
+        _ = MonitorAsync();
+    }
+
+    // Periodic status check while the cashier is signed in.
+    async Task MonitorAsync()
+    {
+        while (!stop.IsCancellationRequested)
+        {
+            if (Auth.IsAuthenticated)
+                await CheckCoreAsync();
+            try
+            {
+                await Task.Delay(Auth.IsAuthenticated ? SystemStatus.NextInterval : TimeSpan.FromSeconds(2), stop.Token);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    async Task CheckNowAsync()
+    {
+        checking = true;
+        await CheckCoreAsync();
+        checking = false;
+    }
+
+    async Task CheckCoreAsync()
+    {
+        try
+        {
+            await SystemStatus.CheckAsync();
+        }
+        catch (Exception)
+        {
+            // A failed check is already reflected in ConnectivityState.
+        }
+    }
+
+    void OnConnectivityChanged() => InvokeAsync(StateHasChanged);
+
     async Task LogoutAsync()
     {
         Checkout.Reset();
         await Auth.SignOutAsync();
         Nav.NavigateTo("login");
+    }
+
+    public void Dispose()
+    {
+        Connectivity.Changed -= OnConnectivityChanged;
+        stop.Cancel();
     }
 }

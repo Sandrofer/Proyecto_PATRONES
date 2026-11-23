@@ -3,6 +3,7 @@
 @inject CheckoutUseCase Checkout
 @inject IAuthSession Auth
 @inject NavigationManager Nav
+@inject ConnectivityState Connectivity
 @implements IDisposable
 
 <PageTitle>Punto de venta</PageTitle>
@@ -261,6 +262,7 @@
                         <span class="muted small">@Ui.StatusLabel(lastRegistration.State) · @Ui.Money(lastRegistration.AmountTotal)@(lastRegistration.Change is > 0 ? $" · vuelto {Ui.Money(lastRegistration.Change.Value)}" : "")</span>
                     </div>
                     <a class="btn small" href="sales/@lastRegistration.OrderId">Ver detalle</a>
+                    <a class="btn small primary" href="sales/@(lastRegistration.OrderId)?imprimir=1"><Icon Name="receipt" /> Imprimir</a>
                 </div>
             }
         </section>
@@ -296,9 +298,10 @@
     string? DiscountError => Checkout.Cart.IsEmpty ? null
         : percentNotNumber ? "El porcentaje de descuento debe ser un número, por ejemplo 5 o 7.5."
         : Checkout.ValidateDiscount();
-    string? BlockingError => percentNotNumber ? DiscountError
+    string? BlockingError => Connectivity.ChargeBlockedReason
+        ?? (percentNotNumber ? DiscountError
         : tenderedNotNumber ? CashError
-        : Checkout.ValidateBeforeSending(paymentMethodId);
+        : Checkout.ValidateBeforeSending(paymentMethodId));
 
     void ChangeTendered(ChangeEventArgs e)
     {
@@ -362,20 +365,32 @@
     protected override async Task OnInitializedAsync()
     {
         Checkout.Cart.Changed += OnCartChanged;
+        Connectivity.Changed += OnConnectivityChanged;
         if (!Auth.IsAuthenticated) return;
 
         var sessionTask = Api.GetActiveSessionAsync();
         var policiesTask = Api.GetDiscountPoliciesAsync();
         await SearchAsync();
 
-        var s = await sessionTask;
-        session = s.Value;
-        sessionError = s.IsSuccess ? null : s.Error;
-        paymentMethodId = session?.PaymentMethods.FirstOrDefault(m => m.IsCash)?.Id ?? 0;
+        ApplySession(await sessionTask);
 
         var p = await policiesTask;
         policies = p.Value?.ToList() ?? [];
         Checkout.Policies = policies;
+    }
+
+    void ApplySession(ApiResult<PosSessionDto> s)
+    {
+        session = s.Value;
+        sessionError = s.IsSuccess ? null : s.Error;
+        paymentMethodId = session?.PaymentMethods.FirstOrDefault(m => m.IsCash)?.Id ?? 0;
+    }
+
+    async Task LoadSessionAsync()
+    {
+        ApplySession(await Api.GetActiveSessionAsync());
+        if (products.Count == 0)
+            await SearchAsync();
     }
 
     async Task SearchAsync()
@@ -486,5 +501,17 @@
         StateHasChanged();
     }
 
-    public void Dispose() => Checkout.Cart.Changed -= OnCartChanged;
+    // When Odoo comes back, reload the session (payment methods) if it was missing.
+    void OnConnectivityChanged() => InvokeAsync(async () =>
+    {
+        if (Connectivity.CanCharge && session is null)
+            await LoadSessionAsync();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        Checkout.Cart.Changed -= OnCartChanged;
+        Connectivity.Changed -= OnConnectivityChanged;
+    }
 }

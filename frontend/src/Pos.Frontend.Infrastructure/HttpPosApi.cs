@@ -9,7 +9,7 @@ namespace Pos.Frontend.Infrastructure;
 
 // Adapter from IPosApi to the .NET REST API. It is the only class of the
 // frontend that knows URLs, HTTP status codes and ProblemDetails.
-public sealed class HttpPosApi(HttpClient http, IAuthSession session) : IPosApi
+public sealed class HttpPosApi(HttpClient http, IAuthSession session, ConnectivityState? connectivity = null) : IPosApi
 {
     static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -24,7 +24,12 @@ public sealed class HttpPosApi(HttpClient http, IAuthSession session) : IPosApi
         SendAsync<PosSessionDto>(HttpMethod.Get, ApiRoutes.ActiveSession);
 
     public Task<ApiResult<IReadOnlyList<DiscountPolicyDto>>> GetDiscountPoliciesAsync() =>
-        SendAsync<IReadOnlyList<DiscountPolicyDto>>(HttpMethod.Get, ApiRoutes.DiscountPolicies);
+        SendAsync<IReadOnlyList<DiscountPolicyDto>>(HttpMethod.Get, ApiRoutes.DiscountPolicies, touchesOdoo: false);
+
+    // The status answer itself is applied by SystemStatusUseCase; here only a
+    // network failure (API down) is reported.
+    public Task<ApiResult<SystemStatusDto>> GetSystemStatusAsync() =>
+        SendAsync<SystemStatusDto>(HttpMethod.Get, ApiRoutes.SystemStatus, touchesOdoo: false);
 
     public Task<ApiResult<SaleQuoteDto>> QuoteAsync(SaleRequest request) =>
         SendAsync<SaleQuoteDto>(HttpMethod.Post, ApiRoutes.SaleQuote, request);
@@ -43,7 +48,15 @@ public sealed class HttpPosApi(HttpClient http, IAuthSession session) : IPosApi
         SendAsync<CustomerDto>(HttpMethod.Get, $"{ApiRoutes.Customers}/{Uri.EscapeDataString(identification)}");
 
     async Task<ApiResult<T>> SendAsync<T>(HttpMethod method, string url, object? body = null,
-        bool authenticated = true, Action<HttpRequestMessage>? headers = null)
+        bool authenticated = true, Action<HttpRequestMessage>? headers = null, bool touchesOdoo = true)
+    {
+        var result = await SendCoreAsync<T>(method, url, body, authenticated, headers);
+        connectivity?.Observe(result.StatusCode, !result.IsSuccess, touchesOdoo);
+        return result;
+    }
+
+    async Task<ApiResult<T>> SendCoreAsync<T>(HttpMethod method, string url, object? body,
+        bool authenticated, Action<HttpRequestMessage>? headers)
     {
         using var request = new HttpRequestMessage(method, url.TrimStart('/'));
         if (body is not null)

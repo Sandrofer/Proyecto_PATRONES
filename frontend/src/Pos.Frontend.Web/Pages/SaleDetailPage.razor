@@ -1,10 +1,17 @@
 @page "/sales/{Id:int}"
 @inject IPosApi Api
+@inject IJSRuntime JS
 
 <PageTitle>Detalle de venta</PageTitle>
 
 <AuthGuard>
-    <a class="back" href="sales"><Icon Name="back" /> Volver al historial</a>
+    <div class="detail-actions no-print">
+        <a class="back" href="sales"><Icon Name="back" /> Volver al historial</a>
+        @if (sale is not null)
+        {
+            <button class="btn primary" @onclick="PrintAsync"><Icon Name="receipt" /> Imprimir comprobante</button>
+        }
+    </div>
     <Alert Message="@error" />
     @if (sale is null && error is null)
     {
@@ -12,7 +19,8 @@
     }
     else if (sale is not null)
     {
-        <section class="panel ticket">
+        <PrintableReceipt Sale="sale" />
+        <section class="panel ticket no-print">
             <header class="ticket-head">
                 <span class="brand-mark"><Icon Name="coffee" Size="20" /></span>
                 <div>
@@ -67,8 +75,32 @@
 
 @code {
     [Parameter] public int Id { get; set; }
+    // ?imprimir=1 opens the print dialog as soon as the sale is loaded (button "Imprimir" after charging).
+    [SupplyParameterFromQuery(Name = "imprimir")] public int? AutoPrint { get; set; }
     SaleDetailDto? sale;
     string? error;
+    bool printed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (AutoPrint == 1 && sale is not null && !printed)
+        {
+            printed = true;
+            await PrintAsync();
+        }
+    }
+
+    async Task PrintAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("print");
+        }
+        catch (JSException)
+        {
+            error = "El navegador no permitió abrir la impresión. Use Ctrl + P.";
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {

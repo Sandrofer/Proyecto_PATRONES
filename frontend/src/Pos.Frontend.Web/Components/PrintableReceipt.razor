@@ -1,0 +1,71 @@
+@* Receipt for an 80 mm thermal printer (also prints fine on A4). Only visible
+   when printing: see "@media print" in app.css. It is a sale voucher, not an
+   SRI electronic invoice (out of scope, section 12 of the project spec). *@
+
+<div class="print-receipt" aria-hidden="true">
+    <div class="r-center">
+        <div class="r-title">@(Sale.Company?.Name ?? "Cafetería UTA")</div>
+        @if (!string.IsNullOrWhiteSpace(Sale.Company?.Vat)) { <div>RUC: @Sale.Company!.Vat</div> }
+        @if (Address is not null) { <div>@Address</div> }
+        @if (!string.IsNullOrWhiteSpace(Sale.Company?.Phone)) { <div>Tel.: @Sale.Company!.Phone</div> }
+    </div>
+    <div class="r-rule"></div>
+    <div class="r-center r-strong">COMPROBANTE DE VENTA</div>
+    <div class="r-row"><span>N.º</span><span>@Sale.Name</span></div>
+    <div class="r-row"><span>Fecha</span><span>@Sale.DateOrderUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span></div>
+    <div class="r-row"><span>Cajero</span><span>@(Sale.CashierName ?? "—")</span></div>
+    <div class="r-row"><span>Caja</span><span>@(Sale.SessionName ?? "—")</span></div>
+    <div class="r-rule"></div>
+    <div class="r-row"><span>Cliente</span><span>@(Sale.CustomerName?.ToUpperInvariant() ?? "CONSUMIDOR FINAL")</span></div>
+    <div class="r-row"><span>C.I./RUC</span><span>@(Sale.CustomerIdentification ?? "9999999999")</span></div>
+    <div class="r-rule"></div>
+
+    <table class="r-lines">
+        <thead><tr><th>Cant.</th><th>Descripción</th><th class="num">Total</th></tr></thead>
+        <tbody>
+            @foreach (var l in Sale.Lines)
+            {
+                <tr>
+                    <td>@Ui.Qty(l.Quantity)</td>
+                    <td>
+                        @l.ProductName
+                        <div class="r-sub">@Ui.Money(l.UnitPrice) c/u@(l.DiscountPercent > 0 ? $" · desc. {l.DiscountPercent:0.##} %" : "")</div>
+                    </td>
+                    <td class="num">@Ui.Money(l.SubtotalWithTax)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="r-rule"></div>
+    <div class="r-row"><span>Subtotal sin IVA</span><span>@Ui.Money(Sale.AmountTotal - Sale.AmountTax)</span></div>
+    <div class="r-row"><span>IVA</span><span>@Ui.Money(Sale.AmountTax)</span></div>
+    <div class="r-row r-total"><span>TOTAL</span><span>@Ui.Money(Sale.AmountTotal)</span></div>
+    @foreach (var p in Sale.Payments.Where(p => !p.IsChange))
+    {
+        <div class="r-row"><span>@p.PaymentMethodName recibido</span><span>@Ui.Money(p.Amount)</span></div>
+    }
+    @if (Sale.AmountReturn > 0)
+    {
+        <div class="r-row r-strong"><span>Vuelto</span><span>@Ui.Money(Sale.AmountReturn)</span></div>
+    }
+    <div class="r-rule"></div>
+    <div class="r-center">¡Gracias por su compra!</div>
+    <div class="r-center r-note">
+        Documento sin validez tributaria. Registrado en Odoo (Id @Sale.Id).
+        Impreso: @DateTime.Now.ToString("dd/MM/yyyy HH:mm")
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SaleDetailDto Sale { get; set; } = default!;
+
+    string? Address
+    {
+        get
+        {
+            var parts = new[] { Sale.Company?.Street, Sale.Company?.City }.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+            return parts.Count == 0 ? null : string.Join(", ", parts);
+        }
+    }
+}

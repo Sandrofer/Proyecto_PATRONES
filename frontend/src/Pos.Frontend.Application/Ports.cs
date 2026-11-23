@@ -32,6 +32,7 @@ public interface IPosApi
     Task<ApiResult<IReadOnlyList<SaleSummaryDto>>> GetSalesAsync();
     Task<ApiResult<SaleDetailDto>> GetSaleAsync(int id);
     Task<ApiResult<CustomerDto>> FindCustomerAsync(string identification);
+    Task<ApiResult<SystemStatusDto>> GetSystemStatusAsync();
 }
 
 public interface IAuthSession

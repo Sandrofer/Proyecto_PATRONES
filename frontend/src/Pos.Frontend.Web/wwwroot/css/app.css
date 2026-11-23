@@ -236,3 +236,47 @@ input.invalid { border-color: var(--err); background: var(--err-bg); }
 .chip.on { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
 .chip:disabled { opacity: .5; cursor: default; }
 .totals .change { font-weight: 700; color: var(--ok); }
+
+/* Odoo connection indicator and outage banner */
+.conn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08);
+        color: inherit; border-radius: 999px; padding: 4px 10px; font: inherit; font-size: .8rem; cursor: pointer; }
+.conn .dot { width: 9px; height: 9px; border-radius: 50%; background: #b9aea5; }
+.conn.online .dot { background: #3fbf6f; box-shadow: 0 0 0 3px rgba(63,191,111,.25); }
+.conn.warn .dot { background: #f0a43a; }
+.conn.down .dot { background: #ef5350; animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 5px rgba(239,83,80,.25); } }
+.outage { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+          padding: 12px 24px; border-bottom: 1px solid var(--line); }
+.outage.down { background: var(--err-bg); color: var(--err); }
+.outage.warn { background: var(--warn-bg); color: var(--warn); }
+.outage.ok { background: var(--ok-bg); color: var(--ok); }
+.outage-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.outage-text .small { opacity: .85; font-size: .82rem; }
+
+/* Sale detail: actions and printable receipt */
+.detail-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.detail-actions .back { margin-bottom: 0; }
+.print-receipt { display: none; }
+
+@media print {
+  @page { size: 80mm auto; margin: 4mm; }
+  body { background: #fff !important; }
+  .topbar, .outage, .no-print, .alert { display: none !important; }
+  .content { padding: 0 !important; max-width: none !important; }
+  .print-receipt { display: block; width: 72mm; margin: 0 auto; color: #000;
+                   font: 11px/1.35 "Consolas", "Courier New", monospace; }
+  .r-center { text-align: center; }
+  .r-title { font-size: 14px; font-weight: 700; }
+  .r-strong { font-weight: 700; }
+  .r-rule { border-top: 1px dashed #000; margin: 6px 0; }
+  .r-row { display: flex; justify-content: space-between; gap: 8px; }
+  .r-row span:last-child { text-align: right; }
+  .r-total { font-size: 14px; font-weight: 700; margin: 2px 0; }
+  .r-lines { width: 100%; border-collapse: collapse; }
+  .r-lines th { text-align: left; border-bottom: 1px solid #000; font-weight: 700; }
+  .r-lines td { vertical-align: top; padding: 2px 0; }
+  .r-lines td:first-child { width: 9mm; }
+  .r-lines .num { text-align: right; white-space: nowrap; }
+  .r-sub { font-size: 10px; }
+  .r-note { font-size: 9px; margin-top: 6px; }
+}

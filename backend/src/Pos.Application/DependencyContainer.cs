@@ -21,6 +21,7 @@ public static class DependencyContainer
         services.AddScoped<IRegisterSaleInputPort, RegisterSaleInteractor>();
         services.AddScoped<IGetSalesHistoryInputPort, GetSalesHistoryInteractor>();
         services.AddScoped<IGetSaleDetailInputPort, GetSaleDetailInteractor>();
+        services.AddScoped<Status.IGetSystemStatusInputPort, Status.GetSystemStatusInteractor>();
         services.AddScoped<Customers.IFindCustomerInputPort, Customers.FindCustomerInteractor>();
         return services;
     }

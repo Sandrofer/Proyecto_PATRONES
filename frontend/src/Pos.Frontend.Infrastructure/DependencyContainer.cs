@@ -9,9 +9,12 @@ public static class DependencyContainer
     {
         services.AddSingleton<BrowserAuthSession>();
         services.AddSingleton<IAuthSession>(sp => sp.GetRequiredService<BrowserAuthSession>());
+        services.AddSingleton<ConnectivityState>();
         services.AddSingleton<IPosApi>(sp => new HttpPosApi(
             new HttpClient { BaseAddress = apiBaseUrl, Timeout = TimeSpan.FromSeconds(30) },
-            sp.GetRequiredService<IAuthSession>()));
+            sp.GetRequiredService<IAuthSession>(),
+            sp.GetRequiredService<ConnectivityState>()));
+        services.AddSingleton<SystemStatusUseCase>();
 
         services.AddSingleton<LoginUseCase>();
         services.AddSingleton<CheckoutUseCase>();

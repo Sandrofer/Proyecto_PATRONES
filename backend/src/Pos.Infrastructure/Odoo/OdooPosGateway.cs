@@ -167,7 +167,7 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
     {
         var rows = await SearchReadAsync("pos.order",
             new JsonArray(Cond("id", "=", orderId), Cond("config_id", "=", _configId)),
-            ["id", "name", "date_order", "state", "amount_total", "amount_tax", "amount_paid", "amount_return", "session_id", "user_id", "partner_id"], ct, 1);
+            ["id", "name", "date_order", "state", "amount_total", "amount_tax", "amount_paid", "amount_return", "session_id", "user_id", "partner_id", "company_id"], ct, 1);
         if (rows.Count == 0)
             return null;
 
@@ -189,7 +189,29 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
                 Dec(l["qty"]), Dec(l["price_unit"]), Dec(l["discount"]),
                 Dec(l["price_subtotal"]), Dec(l["price_subtotal_incl"]))).ToList(),
             payments.Select(p => new SalePaymentDto(Many2OneName(p!["payment_method_id"]) ?? "", Dec(p["amount"]), Bool(p["is_change"]))).ToList(),
-            Dec(o["amount_return"]));
+            Dec(o["amount_return"]),
+            await GetCompanyAsync(Many2OneId(o["company_id"]), ct));
+    }
+
+    // Issuer data for the printed receipt. Optional: a failure here must not
+    // hide the sale detail.
+    async Task<CompanyDto?> GetCompanyAsync(int companyId, CancellationToken ct)
+    {
+        if (companyId == 0)
+            return null;
+        try
+        {
+            var rows = await SearchReadAsync("res.company", new JsonArray(Cond("id", "=", companyId)),
+                ["name", "vat", "street", "city", "phone", "email"], ct, 1);
+            if (rows.Count == 0)
+                return null;
+            var c = rows[0]!;
+            return new CompanyDto(Str(c["name"]) ?? "", Str(c["vat"]), Str(c["street"]), Str(c["city"]), Str(c["phone"]), Str(c["email"]));
+        }
+        catch (ExternalServiceRejectedException)
+        {
+            return null;
+        }
     }
 
     public async Task<CustomerDto?> FindCustomerAsync(string identification, CancellationToken ct)

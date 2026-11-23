@@ -26,6 +26,9 @@ public static class Endpoints
                 Pos.Application.Customers.IFindCustomerInputPort useCase, CancellationToken ct) =>
             Results.Ok(await useCase.HandleAsync(identification, ct)));
 
+        api.MapGet(ApiRoutes.SystemStatus, async (Pos.Application.Status.IGetSystemStatusInputPort useCase, CancellationToken ct) =>
+            Results.Ok(await useCase.HandleAsync(ct)));
+
         api.MapGet(ApiRoutes.ActiveSession, async (IGetActiveSessionInputPort useCase, CancellationToken ct) =>
             Results.Ok(await useCase.HandleAsync(ct)));
 

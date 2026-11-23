@@ -12,8 +12,15 @@ public static class ApiRoutes
     public const string DiscountPolicies = "/api/discount-policies";
     public const string SaleQuote = "/api/sales/quote";
     public const string Sales = "/api/sales";
+    public const string SystemStatus = "/api/status";
     public const string IdempotencyHeader = "Idempotency-Key";
 }
+
+// Health of the integration as seen by the API (Odoo reachable, cash session open).
+public sealed record SystemStatusDto(bool OdooAvailable, bool SessionOpen, string? SessionName, string Message, DateTime CheckedAtUtc);
+
+// Issuer data printed on the sale receipt (read from the Odoo company).
+public sealed record CompanyDto(string Name, string? Vat, string? Street, string? City, string? Phone, string? Email);
 
 public sealed record LoginRequest(string Username, string Password);
 
@@ -131,4 +138,5 @@ public sealed record SaleDetailDto(
     decimal AmountPaid,
     IReadOnlyList<SaleDetailLineDto> Lines,
     IReadOnlyList<SalePaymentDto> Payments,
-    decimal AmountReturn = 0);
+    decimal AmountReturn = 0,
+    CompanyDto? Company = null);
