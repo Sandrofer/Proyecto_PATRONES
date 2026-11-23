@@ -9,6 +9,9 @@ Navegador (Blazor WebAssembly) ──HTTP──►  API REST .NET 10  ──JSON
 
 El frontend **nunca** habla con Odoo; la API key de Odoo solo existe en el backend.
 
+> **¿Primera vez en esta computadora?** Sigue la guía [INSTALACION.md](INSTALACION.md):
+> programas necesarios, descarga, preparación de Odoo, creación del cajero y arranque.
+
 ## Estructura
 
 | Carpeta | Contenido |
