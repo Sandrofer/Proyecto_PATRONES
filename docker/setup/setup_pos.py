@@ -107,6 +107,15 @@ if session.state == 'opening_control':
 env['res.users.apikeys'].sudo().search([('user_id', '=', user.id), ('name', '=', 'pos-dotnet-api')]).unlink()
 api_key = env['res.users.apikeys'].with_user(user)._generate('rpc', 'pos-dotnet-api', datetime.now() + timedelta(days=90))
 
+# 8. Odoo interface in Spanish (Ecuador) for the administrator and new contacts.
+#    The integration user stays in English: the API never shows Odoo texts.
+if not env['res.lang']._lang_get('es_EC'):
+    env['res.lang']._activate_lang('es_EC')
+    env['ir.module.module'].search([('state', '=', 'installed')])._update_translations(['es_EC'])
+env.ref('base.user_admin').write({'lang': 'es_EC', 'tz': 'America/Guayaquil'})
+company.partner_id.write({'lang': 'es_EC'})
+env['ir.default'].set('res.partner', 'lang', 'es_EC')
+
 env.cr.commit()
 
 print('SETUP_RESULT=' + json.dumps({
