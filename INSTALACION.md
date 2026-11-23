@@ -137,6 +137,9 @@ Ambas deben terminar en **Correctas!** con 0 errores. La guía completa de prueb
 
 ## 7. Presentación con dos computadoras
 
+> Tutorial completo, con pruebas de conexión, qué demostrar y solución de problemas:
+> [docs/conexion-dos-computadoras.md](docs/conexion-dos-computadoras.md).
+
 Las dos deben estar en la **misma red** (misma Wi-Fi). Haz los pasos 1–3 en ambas; el paso 4
 solo en la del backend.
 

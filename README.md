@@ -11,6 +11,9 @@ El frontend **nunca** habla con Odoo; la API key de Odoo solo existe en el backe
 
 > **¿Primera vez en esta computadora?** Sigue la guía [INSTALACION.md](INSTALACION.md):
 > programas necesarios, descarga, preparación de Odoo, creación del cajero y arranque.
+>
+> - **Presentación con dos computadoras:** [docs/conexion-dos-computadoras.md](docs/conexion-dos-computadoras.md)
+> - **Guía de estudio para la defensa:** [docs/guia-de-estudio.md](docs/guia-de-estudio.md)
 
 ## Estructura
 
@@ -29,6 +32,8 @@ El frontend **nunca** habla con Odoo; la API key de Odoo solo existe en el backe
 | `scripts/` | Scripts de preparación y arranque. |
 | `docs/decisiones-diseno.md` | Registro de decisiones de diseño (patrones). |
 | `docs/diagramas.md` | Diagramas: despliegue, capas, Strategy, secuencia del cobro y estados de la venta. |
+| `docs/conexion-dos-computadoras.md` | Tutorial para conectar frontend y backend en dos computadoras. |
+| `docs/guia-de-estudio.md` | Todo lo que hay que estudiar para la defensa, con preguntas y cambios de requisito. |
 
 ## Requisitos previos
 
