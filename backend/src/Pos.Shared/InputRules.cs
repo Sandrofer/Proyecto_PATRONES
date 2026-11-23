@@ -20,6 +20,25 @@ public static partial class InputRules
     [GeneratedRegex(@"^[\p{L}\p{N}._\-@]+$")]
     private static partial Regex UsernamePattern();
 
+    public const int MaxQuantityPerLine = 999;
+    public const int MaxLines = 50;
+    public const int MinNameLength = 3;
+    public const int MaxNameLength = 80;
+
+    // Person names: letters (with accents), spaces and . ' -
+    [GeneratedRegex(@"^[\p{L} .'\-]+$")]
+    private static partial Regex PersonNamePattern();
+
+    public static string? ValidatePersonName(string? text)
+    {
+        string value = string.Join(' ', (text ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        if (value.Length < MinNameLength)
+            return $"Ingrese el nombre del cliente (mínimo {MinNameLength} letras).";
+        if (value.Length > MaxNameLength)
+            return $"El nombre del cliente no puede superar {MaxNameLength} caracteres.";
+        return PersonNamePattern().IsMatch(value) ? null : "El nombre del cliente solo puede contener letras.";
+    }
+
     public const string SearchCharactersMessage =
         "La búsqueda solo admite letras, números, espacios y los símbolos - . _ /";
     public const string UsernameCharactersMessage =

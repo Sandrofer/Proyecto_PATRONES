@@ -31,5 +31,6 @@ public interface IGetDiscountPoliciesInputPort
 public sealed class GetDiscountPoliciesInteractor(IDiscountPolicyCatalog catalog) : IGetDiscountPoliciesInputPort
 {
     public IReadOnlyList<DiscountPolicyDto> Handle() =>
-        catalog.All.Select(p => new DiscountPolicyDto(p.Code, p.Description, p.RequiresPercent, p.MaxPercent)).ToList();
+        catalog.All.Select(p => new DiscountPolicyDto(
+            p.Code, p.Description, p.RequiresPercent, p.MaxPercent, p.MinimumAmount, p.RequiresIdentifiedCustomer)).ToList();
 }

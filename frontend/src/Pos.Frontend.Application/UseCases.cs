@@ -39,22 +39,74 @@ public sealed class CheckoutUseCase(IPosApi api)
     public decimal? DiscountPercent { get; set; }
     public Guid? PendingOperation { get; private set; }
 
-    // Customer: both empty = consumidor final.
+    // Policies published by the API, with their conditions (minimum amount,
+    // identified customer, maximum percent).
+    public IReadOnlyList<DiscountPolicyDto> Policies { get; set; } = [];
+    public DiscountPolicyDto? SelectedPolicy =>
+        Policies.FirstOrDefault(p => string.Equals(p.Code, DiscountPolicyCode, StringComparison.OrdinalIgnoreCase));
+
+    // Customer: CustomerRequired = "Con cédula" selected; otherwise consumidor final.
+    public bool CustomerRequired { get; set; }
     public string CustomerIdentification { get; set; } = "";
     public string CustomerName { get; set; } = "";
     public bool HasCustomer => !string.IsNullOrWhiteSpace(CustomerIdentification) || !string.IsNullOrWhiteSpace(CustomerName);
+    bool HasValidCustomer => (CustomerRequired || HasCustomer) && ValidateCustomer() is null;
 
     // Returns an error message or null when the customer data is acceptable.
     public string? ValidateCustomer()
     {
-        if (!HasCustomer)
+        if (!CustomerRequired && !HasCustomer)
             return null;
+        if (string.IsNullOrWhiteSpace(CustomerIdentification))
+            return "Ingrese la cédula del cliente o elija «Consumidor final».";
         if (!Cedula.IsValid(CustomerIdentification.Trim()))
             return "La cédula no es válida (10 dígitos, provincia y dígito verificador).";
-        if (CustomerName.Trim().Length < 3)
-            return "Ingrese el nombre del cliente (mínimo 3 letras).";
+        return InputRules.ValidatePersonName(CustomerName);
+    }
+
+    // Same conditions the API applies (RN-04, RF-08), checked before calling it
+    // so the cashier sees the reason at once. The API checks them again.
+    public string? ValidateDiscount()
+    {
+        if (string.Equals(DiscountPolicyCode, "NONE", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var policy = SelectedPolicy;
+        if (policy is null)
+            return "La política de descuento seleccionada no está disponible.";
+
+        if (policy.RequiresPercent)
+        {
+            if (DiscountPercent is not decimal percent)
+                return "Indique el porcentaje del descuento.";
+            if (percent <= 0)
+                return "El porcentaje de descuento debe ser mayor que cero.";
+            if (!InputRules.HasValidDecimals(percent))
+                return "El porcentaje de descuento admite como máximo 2 decimales.";
+            if (policy.MaxPercent is decimal max && percent > max)
+                return $"El descuento máximo autorizado es {max:0.##} %.";
+        }
+
+        decimal amount = Cart.CalculateTotals().Total;
+        if (policy.MinimumAmount is decimal minimum && amount < minimum)
+            return $"Este descuento requiere una compra mínima de $ {minimum:N2} (total actual $ {amount:N2}).";
+
+        if (policy.RequiresIdentifiedCustomer && !HasValidCustomer)
+            return "Este descuento requiere identificar al cliente con su cédula (elija «Con cédula»).";
+
         return null;
     }
+
+    // Percent used for the provisional total: only when the discount is valid.
+    public decimal ProvisionalDiscountPercent =>
+        Cart.IsEmpty || ValidateDiscount() is not null || SelectedPolicy is not { } p ? 0m
+        : p.RequiresPercent ? DiscountPercent ?? 0m
+        : p.MaxPercent ?? 0m;
+
+    // First reason why the sale cannot be sent yet, or null.
+    public string? ValidateBeforeSending(int paymentMethodId) =>
+        Cart.IsEmpty ? "Agregue al menos un producto."
+        : paymentMethodId <= 0 ? "Seleccione un método de pago."
+        : ValidateCustomer() ?? ValidateDiscount();
 
     public SaleRequest BuildRequest(int paymentMethodId) => new(
         Cart.Lines.Select(l => new SaleLineRequest(l.Product.Id, l.Quantity)).ToList(),
@@ -65,19 +117,16 @@ public sealed class CheckoutUseCase(IPosApi api)
 
     public async Task<ApiResult<SaleQuoteDto>> QuoteAsync(int paymentMethodId)
     {
-        if (Cart.IsEmpty)
-            return ApiResult<SaleQuoteDto>.Fail("Agregue al menos un producto.");
+        if (ValidateBeforeSending(paymentMethodId) is string error)
+            return ApiResult<SaleQuoteDto>.Fail(error);
         return await api.QuoteAsync(BuildRequest(paymentMethodId));
     }
 
     public async Task<CheckoutResult> ConfirmAsync(int paymentMethodId)
     {
-        if (Cart.IsEmpty)
-            return new CheckoutResult(false, false, "Agregue al menos un producto antes de confirmar.", null);
-        if (paymentMethodId <= 0)
-            return new CheckoutResult(false, false, "Seleccione un método de pago.", null);
-        if (ValidateCustomer() is string customerError)
-            return new CheckoutResult(false, false, customerError, null);
+        // A pending operation is retried exactly as it was sent.
+        if (PendingOperation is null && ValidateBeforeSending(paymentMethodId) is string error)
+            return new CheckoutResult(false, false, error, null);
 
         PendingOperation ??= Guid.NewGuid();
         var result = await api.RegisterSaleAsync(PendingOperation.Value, BuildRequest(paymentMethodId));
@@ -105,6 +154,7 @@ public sealed class CheckoutUseCase(IPosApi api)
         DiscountPercent = null;
         CustomerIdentification = "";
         CustomerName = "";
+        CustomerRequired = false;
         return new CheckoutResult(true, false, registration.Message, registration);
     }
 
@@ -116,5 +166,6 @@ public sealed class CheckoutUseCase(IPosApi api)
         DiscountPercent = null;
         CustomerIdentification = "";
         CustomerName = "";
+        CustomerRequired = false;
     }
 }

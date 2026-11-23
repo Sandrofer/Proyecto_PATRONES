@@ -65,6 +65,9 @@ public sealed class SaleBuilder(IPosGateway gateway, IDiscountPolicyCatalog disc
         if (request?.Lines is null || request.Lines.Count == 0)
             throw ValidationException.For("lines", "La venta debe contener al menos un producto.");
 
+        if (request.Lines.Count > Sale.MaxLines)
+            throw ValidationException.For("lines", $"Una venta admite como máximo {Sale.MaxLines} productos distintos.");
+
         var errors = new Dictionary<string, string[]>();
         for (int i = 0; i < request.Lines.Count; i++)
         {
@@ -73,6 +76,8 @@ public sealed class SaleBuilder(IPosGateway gateway, IDiscountPolicyCatalog disc
                 errors[$"lines[{i}].quantity"] = ["La cantidad debe ser mayor que cero."];
             else if (qty != decimal.Truncate(qty))
                 errors[$"lines[{i}].quantity"] = ["La cantidad debe ser un número entero."];
+            else if (qty > Sale.MaxQuantityPerLine)
+                errors[$"lines[{i}].quantity"] = [$"La cantidad no puede superar {Sale.MaxQuantityPerLine} unidades."];
             if (request.Lines[i].ProductId <= 0)
                 errors[$"lines[{i}].productId"] = ["El producto no es válido."];
         }

@@ -27,6 +27,10 @@ public sealed record CartTotals(decimal Untaxed, decimal Tax, decimal Total);
 // The total is provisional; the API recalculates it with Odoo's data.
 public sealed class Cart
 {
+    // Same limits as the API (one sale is a counter sale, not a wholesale order).
+    public const int MaxQuantityPerLine = 999;
+    public const int MaxLines = 50;
+
     readonly List<CartLine> _lines = [];
 
     public IReadOnlyList<CartLine> Lines => _lines;
@@ -38,6 +42,9 @@ public sealed class Cart
     {
         EnsureValidQuantity(quantity);
         int index = _lines.FindIndex(l => l.Product.Id == product.Id);
+        if (index < 0 && _lines.Count >= MaxLines)
+            throw new InvalidOperationException($"Una venta admite como máximo {MaxLines} productos distintos.");
+        EnsureValidQuantity(quantity + (index >= 0 ? _lines[index].Quantity : 0));
         EnsureStock(product, quantity + (index >= 0 ? _lines[index].Quantity : 0));
         if (index >= 0)
             _lines[index] = _lines[index] with { Quantity = _lines[index].Quantity + quantity };
@@ -101,5 +108,7 @@ public sealed class Cart
             throw new ArgumentOutOfRangeException(null, "La cantidad debe ser mayor que cero.");
         if (quantity != decimal.Truncate(quantity))
             throw new ArgumentOutOfRangeException(null, "La cantidad debe ser un número entero.");
+        if (quantity > MaxQuantityPerLine)
+            throw new ArgumentOutOfRangeException(null, $"La cantidad no puede superar {MaxQuantityPerLine} unidades.");
     }
 }

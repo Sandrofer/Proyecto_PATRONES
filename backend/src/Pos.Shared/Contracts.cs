@@ -39,7 +39,9 @@ public sealed record PosSessionDto(
     string ConfigName,
     IReadOnlyList<PaymentMethodDto> PaymentMethods);
 
-public sealed record DiscountPolicyDto(string Code, string Description, bool RequiresPercent, decimal? MaxPercent);
+// MinimumAmount / RequiresIdentifiedCustomer let the browser warn before calling the API.
+public sealed record DiscountPolicyDto(string Code, string Description, bool RequiresPercent, decimal? MaxPercent,
+    decimal? MinimumAmount = null, bool RequiresIdentifiedCustomer = false);
 
 public sealed record SaleLineRequest(int ProductId, decimal Quantity);
 

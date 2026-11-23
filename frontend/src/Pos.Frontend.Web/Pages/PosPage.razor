@@ -113,7 +113,7 @@
                             <div class="stepper">
                                 <button class="icon-btn" disabled="@(Locked || qty <= 1)" aria-label="Restar"
                                         @onclick="() => Run(() => Checkout.Cart.SetQuantity(pid, qty - 1))"><Icon Name="minus" Size="14" /></button>
-                                <input @key="(pid, qtyRender)" type="number" min="1" step="1" value="@qty" disabled="@Locked"
+                                <input @key="(pid, qtyRender)" inputmode="numeric" maxlength="4" value="@qty" disabled="@Locked"
                                        @onchange="e => ChangeQuantity(pid, e.Value)" aria-label="Cantidad" />
                                 <button class="icon-btn" disabled="@(Locked || Pos.Frontend.Domain.Cart.RemainingStock(line.Product, qty) is <= 0)" aria-label="Sumar"
                                         @onclick="() => Run(() => Checkout.Cart.SetQuantity(pid, qty + 1))"><Icon Name="plus" Size="14" /></button>
@@ -129,10 +129,10 @@
             <fieldset class="customer">
                 <legend><Icon Name="user" Size="15" /> Cliente</legend>
                 <div class="segmented">
-                    <button type="button" class="@(customerMode ? "" : "on")" disabled="@Locked" @onclick="() => SetCustomerMode(false)">Consumidor final</button>
-                    <button type="button" class="@(customerMode ? "on" : "")" disabled="@Locked" @onclick="() => SetCustomerMode(true)">Con cédula</button>
+                    <button type="button" class="@(Checkout.CustomerRequired ? "" : "on")" disabled="@Locked" @onclick="() => SetCustomerMode(false)">Consumidor final</button>
+                    <button type="button" class="@(Checkout.CustomerRequired ? "on" : "")" disabled="@Locked" @onclick="() => SetCustomerMode(true)">Con cédula</button>
                 </div>
-                @if (customerMode)
+                @if (Checkout.CustomerRequired)
                 {
                     <div class="form-grid tight">
                         <label class="field">
@@ -142,7 +142,7 @@
                         </label>
                         <label class="field">
                             <span>Nombre</span>
-                            <input value="@Checkout.CustomerName" placeholder="Nombre y apellido" maxlength="80" disabled="@Locked"
+                            <input value="@Checkout.CustomerName" placeholder="Nombre y apellido" maxlength="@InputRules.MaxNameLength" disabled="@Locked"
                                    @onchange="ChangeCustomerName" />
                         </label>
                     </div>
@@ -150,7 +150,7 @@
                     {
                         <p class="hint ok"><Icon Name="check" Size="14" /> @customerHint</p>
                     }
-                    <Alert Message="@customerError" Kind="warn" />
+                    <Alert Message="@CustomerError" Kind="warn" />
                 }
             </fieldset>
 
@@ -183,14 +183,18 @@
                     </select>
                 </label>
             </div>
+            <Alert Message="@DiscountError" Kind="warn" />
 
-            @{ var provisional = Checkout.Cart.CalculateTotals(quote?.DiscountPercent ?? 0); }
+            @{
+                decimal discountShown = quote?.DiscountPercent ?? Checkout.ProvisionalDiscountPercent;
+                var provisional = Checkout.Cart.CalculateTotals(discountShown);
+            }
             <div class="totals">
                 <div><span>Subtotal</span><span>@Ui.Money(quote?.AmountUntaxed ?? provisional.Untaxed)</span></div>
                 <div><span>IVA</span><span>@Ui.Money(quote?.AmountTax ?? provisional.Tax)</span></div>
-                @if (quote is { DiscountPercent: > 0 })
+                @if (discountShown > 0)
                 {
-                    <div class="discount"><span>Descuento aplicado</span><span>@quote.DiscountPercent.ToString("0.##") %</span></div>
+                    <div class="discount"><span>Descuento aplicado</span><span>@discountShown.ToString("0.##") %</span></div>
                 }
                 <div class="grand">
                     <span>Total <small class="@(quote is null ? "tag" : "tag ok")">@(quote is null ? "provisional" : "verificado")</small></span>
@@ -208,8 +212,8 @@
                 }
                 else
                 {
-                    <button class="btn" disabled="@(busy || Checkout.Cart.IsEmpty)" @onclick="QuoteAsync">Verificar total</button>
-                    <button class="btn primary big" disabled="@(busy || Checkout.Cart.IsEmpty || session is null)" @onclick="ConfirmAsync">
+                    <button class="btn" disabled="@(busy || BlockingError is not null)" title="@BlockingError" @onclick="QuoteAsync">Verificar total</button>
+                    <button class="btn primary big" disabled="@(busy || session is null || BlockingError is not null)" title="@BlockingError" @onclick="ConfirmAsync">
                         @if (busy)
                         {
                             <span class="spinner"></span> <span>Registrando…</span>
@@ -250,17 +254,26 @@
     string checkoutKind = "error";
 
     bool Locked => busy || Checkout.PendingOperation is not null;
-    bool customerMode;
     int qtyRender;
-    string? customerError, customerHint;
+    string? customerHint;
+    bool percentNotNumber;
+
+    // Live validation: the message appears as soon as the data is wrong, and
+    // Verificar/Cobrar stay disabled until it is fixed.
+    string? CustomerError => Checkout.CustomerRequired ? Checkout.ValidateCustomer() : null;
+    string? DiscountError => Checkout.Cart.IsEmpty ? null
+        : percentNotNumber ? "El porcentaje de descuento debe ser un número, por ejemplo 5 o 7.5."
+        : Checkout.ValidateDiscount();
+    string? BlockingError => percentNotNumber ? DiscountError : Checkout.ValidateBeforeSending(paymentMethodId);
 
     string CedulaClass => string.IsNullOrEmpty(Checkout.CustomerIdentification) ? ""
         : Pos.Frontend.Domain.Cedula.IsValid(Checkout.CustomerIdentification.Trim()) ? "valid" : "invalid";
 
     void SetCustomerMode(bool on)
     {
-        customerMode = on;
-        customerError = customerHint = null;
+        Checkout.CustomerRequired = on;
+        customerHint = cartError = null;
+        quote = null;
         if (!on)
         {
             Checkout.CustomerIdentification = "";
@@ -271,7 +284,7 @@
     void ChangeCustomerName(ChangeEventArgs e)
     {
         Checkout.CustomerName = e.Value?.ToString() ?? "";
-        customerError = Checkout.ValidateCustomer();
+        quote = null;
     }
 
     // Validates the cedula and, if the customer already exists in Odoo, fills the name.
@@ -279,12 +292,9 @@
     {
         Checkout.CustomerIdentification = (e.Value?.ToString() ?? "").Trim();
         customerHint = null;
+        quote = null;
         if (!Pos.Frontend.Domain.Cedula.IsValid(Checkout.CustomerIdentification))
-        {
-            customerError = "La cédula no es válida (10 dígitos, provincia y dígito verificador).";
-            return;
-        }
-        customerError = null;
+            return; // CustomerError shows the reason
         var found = await Api.FindCustomerAsync(Checkout.CustomerIdentification);
         if (found.Value is not null)
         {
@@ -294,7 +304,7 @@
         else if (found.StatusCode == 404)
             customerHint = "Cliente nuevo: se creará en Odoo al cobrar.";
     }
-    DiscountPolicyDto? SelectedPolicy => policies.FirstOrDefault(p => p.Code == Checkout.DiscountPolicyCode);
+    DiscountPolicyDto? SelectedPolicy => Checkout.SelectedPolicy;
 
     protected override async Task OnInitializedAsync()
     {
@@ -312,6 +322,7 @@
 
         var p = await policiesTask;
         policies = p.Value?.ToList() ?? [];
+        Checkout.Policies = policies;
     }
 
     async Task SearchAsync()
@@ -333,7 +344,9 @@
 
     void ChangeQuantity(int productId, object? value)
     {
-        if (!decimal.TryParse(value?.ToString(), System.Globalization.NumberStyles.Number,
+        // Accept "2" or "2.0"; a comma is a decimal mark, never a thousands separator ("1,5" is not 15).
+        string text = (value?.ToString() ?? "").Trim().Replace(',', '.');
+        if (!decimal.TryParse(text, System.Globalization.NumberStyles.AllowDecimalPoint,
                 System.Globalization.CultureInfo.InvariantCulture, out var qty) || qty <= 0)
         {
             cartError = "La cantidad debe ser un número mayor que cero.";
@@ -347,27 +360,20 @@
     {
         Checkout.DiscountPolicyCode = e.Value?.ToString() ?? "NONE";
         Checkout.DiscountPercent = null;
+        percentNotNumber = false;
+        checkoutMessage = cartError = null;
         quote = null;
     }
 
     void ChangePercent(ChangeEventArgs e)
     {
         quote = null;
+        checkoutMessage = null;
         string text = (e.Value?.ToString() ?? "").Trim().Replace(',', '.');
-        if (!decimal.TryParse(text, System.Globalization.NumberStyles.AllowDecimalPoint,
-                System.Globalization.CultureInfo.InvariantCulture, out var v))
-        {
-            Checkout.DiscountPercent = null;
-            (checkoutMessage, checkoutKind) = ("El porcentaje de descuento debe ser un número, por ejemplo 5 o 7.5.", "error");
-            return;
-        }
-        Checkout.DiscountPercent = v;
-        var max = SelectedPolicy?.MaxPercent;
-        (checkoutMessage, checkoutKind) =
-            v <= 0 ? ("El porcentaje de descuento debe ser mayor que cero.", "error")
-            : max is not null && v > max ? ($"El descuento máximo autorizado es {max:0.##} %.", "error")
-            : !InputRules.HasValidDecimals(v) ? ("El porcentaje admite como máximo 2 decimales.", "error")
-            : ((string?)null, "error");
+        percentNotNumber = text.Length > 0 && !decimal.TryParse(text, System.Globalization.NumberStyles.AllowDecimalPoint,
+            System.Globalization.CultureInfo.InvariantCulture, out _);
+        Checkout.DiscountPercent = !percentNotNumber && text.Length > 0
+            ? decimal.Parse(text, System.Globalization.CultureInfo.InvariantCulture) : null;
     }
 
     void Run(Action action)

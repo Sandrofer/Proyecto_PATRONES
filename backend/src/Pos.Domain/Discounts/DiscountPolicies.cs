@@ -8,10 +8,15 @@ public interface IDiscountPolicy
     string Description { get; }
     bool RequiresPercent { get; }
     decimal? MaxPercent { get; }
+    // Conditions published to the browser so it can warn before calling the API.
+    // Default members: existing policies do not need to change (RF-07).
+    decimal? MinimumAmount => null;
+    bool RequiresIdentifiedCustomer => false;
     DiscountDecision Evaluate(DiscountContext context);
 }
 
-public sealed record DiscountContext(decimal AmountBeforeDiscount, decimal? RequestedPercent);
+public sealed record DiscountContext(decimal AmountBeforeDiscount, decimal? RequestedPercent,
+    bool HasIdentifiedCustomer = false);
 
 public sealed record DiscountDecision(bool IsApproved, decimal Percent, string? RejectionReason)
 {
@@ -60,11 +65,17 @@ public sealed class StudentDiscountPolicy(decimal percent) : IDiscountPolicy
 {
     public const string PolicyCode = "STUDENT";
     public string Code => PolicyCode;
-    public string Description => $"Estudiante ({percent:0.##} %)";
+    public string Description => $"Estudiante ({percent:0.##} %, requiere cédula)";
     public bool RequiresPercent => false;
     public decimal? MaxPercent => percent;
 
-    public DiscountDecision Evaluate(DiscountContext context) => DiscountDecision.Approve(percent);
+    public bool RequiresIdentifiedCustomer => true;
+
+    // The student must be identified with a cedula: never to "consumidor final".
+    public DiscountDecision Evaluate(DiscountContext context) =>
+        context.HasIdentifiedCustomer
+            ? DiscountDecision.Approve(percent)
+            : DiscountDecision.Reject("El descuento de estudiante requiere identificar al cliente con su cédula.");
 }
 
 // Automatic discount when the purchase reaches a minimum amount.
@@ -75,6 +86,7 @@ public sealed class VolumeDiscountPolicy(decimal minimumAmount, decimal percent)
     public string Description => $"{percent:0.##} % por compras desde {minimumAmount:0.00}";
     public bool RequiresPercent => false;
     public decimal? MaxPercent => percent;
+    public decimal? MinimumAmount => minimumAmount;
 
     public DiscountDecision Evaluate(DiscountContext context) =>
         context.AmountBeforeDiscount >= minimumAmount

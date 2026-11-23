@@ -14,6 +14,9 @@ public enum SaleStatus
 // RN-04, RN-05 and RN-06; nothing outside can change its lines directly.
 public sealed class Sale
 {
+    public const int MaxQuantityPerLine = 999;
+    public const int MaxLines = 50;
+
     readonly List<SaleLine> _lines = [];
 
     public Sale(Guid reference, TaxRoundingMode taxRounding = TaxRoundingMode.PerLine)
@@ -53,6 +56,11 @@ public sealed class Sale
         var existing = _lines.FirstOrDefault(l => l.Product.Id == product.Id);
         decimal total = quantity + (existing?.Quantity ?? 0);
 
+        if (total > MaxQuantityPerLine)
+            throw new DomainException($"La cantidad de '{product.Name}' no puede superar {MaxQuantityPerLine} unidades por venta.");
+        if (existing is null && _lines.Count >= MaxLines)
+            throw new DomainException($"Una venta admite como máximo {MaxLines} productos distintos.");
+
         // RN-09: a storable product cannot be sold beyond the stock Odoo reports.
         // (QuantityAvailable is null for services/consumables without stock control.)
         if (product.QuantityAvailable is decimal available && total > available)
@@ -74,6 +82,8 @@ public sealed class Sale
     public void AssignCustomer(Customer? customer)
     {
         EnsureInPreparation();
+        if (DiscountPolicyCode is not null)
+            throw new DomainException("Asigne el cliente antes de aplicar el descuento.");
         Customer = customer;
     }
 
@@ -84,7 +94,8 @@ public sealed class Sale
         EnsureInPreparation();
         ArgumentNullException.ThrowIfNull(policy);
 
-        var decision = policy.Evaluate(new DiscountContext(CalculateTotals(0m).AmountTotal, requestedPercent));
+        var decision = policy.Evaluate(new DiscountContext(CalculateTotals(0m).AmountTotal, requestedPercent,
+            HasIdentifiedCustomer: Customer is not null));
         if (!decision.IsApproved)
             throw new DomainException(decision.RejectionReason!);
 
