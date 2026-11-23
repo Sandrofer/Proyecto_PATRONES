@@ -1,5 +1,6 @@
 using Pos.Application.Ports;
 using Pos.Domain;
+using Pos.Domain.Sales;
 using Pos.Shared;
 
 namespace Pos.Application.Sales;
@@ -78,8 +79,19 @@ public sealed class RegisterSaleInteractor(
             throw ValidationException.For("sale", ex.Message);
         }
 
-        var submission = new OrderSubmission(sale, sale.CalculateTotals(), session, paymentMethod,
-            currentOperator.Name, currentOperator.OdooUserId);
+        var totals = sale.CalculateTotals();
+        CashTender cash;
+        try
+        {
+            cash = CashTender.Create(totals.AmountTotal, request.AmountTendered);
+        }
+        catch (DomainException ex)
+        {
+            throw ValidationException.For("amountTendered", ex.Message);
+        }
+
+        var submission = new OrderSubmission(sale, totals, session, paymentMethod,
+            currentOperator.Name, currentOperator.OdooUserId, cash);
 
         try
         {
@@ -115,5 +127,5 @@ public sealed class RegisterSaleInteractor(
     }
 
     static SaleRegistrationDto Registered(RegisteredOrder order, SaleRegistrationOutcome outcome, string message) =>
-        new(outcome, message, order.Id, order.Name, order.State, order.AmountTotal);
+        new(outcome, message, order.Id, order.Name, order.State, order.AmountTotal, order.AmountReturn);
 }

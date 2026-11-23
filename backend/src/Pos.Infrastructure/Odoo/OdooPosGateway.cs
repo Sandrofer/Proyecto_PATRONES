@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using Pos.Application;
 using Pos.Application.Ports;
 using Pos.Domain.Catalog;
+using Pos.Domain.Sales;
 using Pos.Shared;
 
 namespace Pos.Infrastructure.Odoo;
@@ -78,7 +79,7 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
     {
         var rows = await SearchReadAsync("pos.order",
             new JsonArray(Cond("uuid", "=", reference.ToString())),
-            ["id", "name", "state", "amount_total"], ct, 1);
+            ["id", "name", "state", "amount_total", "amount_return"], ct, 1);
         if (rows.Count == 0)
             return null;
 
@@ -91,6 +92,7 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
     {
         var sale = submission.Sale;
         var totals = submission.Totals;
+        var cash = submission.Cash ?? CashTender.Create(totals.AmountTotal, null);
         string now = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
 
         var lines = new JsonArray();
@@ -124,14 +126,16 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
             ["date_order"] = now,
             ["amount_tax"] = totals.AmountTax,
             ["amount_total"] = totals.AmountTotal,
-            ["amount_paid"] = totals.AmountTotal,
-            ["amount_return"] = 0,
+            // Odoo convention: the payment carries the cash received and
+            // amount_return (negative) makes Odoo add the change line itself.
+            ["amount_paid"] = cash.AmountTendered,
+            ["amount_return"] = -cash.Change,
             // The cashier (Odoo user) who made the sale.
             ["user_id"] = submission.OperatorUserId is int uid ? uid : null,
             ["lines"] = lines,
             ["payment_ids"] = new JsonArray(Create(new JsonObject
             {
-                ["amount"] = totals.AmountTotal,
+                ["amount"] = cash.AmountTendered,
                 ["payment_method_id"] = submission.PaymentMethod.Id,
                 ["payment_date"] = now,
                 ["name"] = $"Operador: {submission.OperatorName}"
@@ -163,7 +167,7 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
     {
         var rows = await SearchReadAsync("pos.order",
             new JsonArray(Cond("id", "=", orderId), Cond("config_id", "=", _configId)),
-            ["id", "name", "date_order", "state", "amount_total", "amount_tax", "amount_paid", "session_id", "user_id", "partner_id"], ct, 1);
+            ["id", "name", "date_order", "state", "amount_total", "amount_tax", "amount_paid", "amount_return", "session_id", "user_id", "partner_id"], ct, 1);
         if (rows.Count == 0)
             return null;
 
@@ -174,7 +178,7 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
         var lines = await SearchReadAsync("pos.order.line", new JsonArray(Cond("order_id", "=", orderId)),
             ["full_product_name", "product_id", "qty", "price_unit", "discount", "price_subtotal", "price_subtotal_incl"], ct);
         var payments = await SearchReadAsync("pos.payment", new JsonArray(Cond("pos_order_id", "=", orderId)),
-            ["payment_method_id", "amount"], ct);
+            ["payment_method_id", "amount", "is_change"], ct);
 
         return new SaleDetailDto(
             Int(o["id"]), Str(o["name"]) ?? "", Date(o["date_order"]), Str(o["state"]) ?? "",
@@ -184,7 +188,8 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
                 Str(l!["full_product_name"]) ?? Many2OneName(l["product_id"]) ?? "",
                 Dec(l["qty"]), Dec(l["price_unit"]), Dec(l["discount"]),
                 Dec(l["price_subtotal"]), Dec(l["price_subtotal_incl"]))).ToList(),
-            payments.Select(p => new SalePaymentDto(Many2OneName(p!["payment_method_id"]) ?? "", Dec(p["amount"]))).ToList());
+            payments.Select(p => new SalePaymentDto(Many2OneName(p!["payment_method_id"]) ?? "", Dec(p["amount"]), Bool(p["is_change"]))).ToList(),
+            Dec(o["amount_return"]));
     }
 
     public async Task<CustomerDto?> FindCustomerAsync(string identification, CancellationToken ct)
@@ -209,7 +214,7 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
     async Task<RegisteredOrder?> FindAnyOrderAsync(Guid reference, CancellationToken ct)
     {
         var rows = await SearchReadAsync("pos.order", new JsonArray(Cond("uuid", "=", reference.ToString())),
-            ["id", "name", "state", "amount_total"], ct, 1);
+            ["id", "name", "state", "amount_total", "amount_return"], ct, 1);
         return rows.Count == 0 ? null : ToRegisteredOrder(rows[0]!);
     }
 
@@ -258,7 +263,7 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
     }
 
     static RegisteredOrder ToRegisteredOrder(JsonNode row) =>
-        new(Int(row["id"]), Str(row["name"]) ?? "", Str(row["state"]) ?? "", Dec(row["amount_total"]));
+        new(Int(row["id"]), Str(row["name"]) ?? "", Str(row["state"]) ?? "", Dec(row["amount_total"]), Dec(row["amount_return"]));
 
     // Odoo ORM command (0, 0, values) = create a related record.
     static JsonArray Create(JsonObject values) => new(0, 0, values);

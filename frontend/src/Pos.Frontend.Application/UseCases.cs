@@ -37,6 +37,13 @@ public sealed class CheckoutUseCase(IPosApi api)
     public Cart Cart { get; } = new();
     public string DiscountPolicyCode { get; set; } = "NONE";
     public decimal? DiscountPercent { get; set; }
+    // Cash handed over by the customer; null = exact amount.
+    public decimal? AmountTendered { get; set; }
+
+    // Total to collect with the discount the cashier selected (if valid).
+    public decimal AmountDue => Cart.CalculateTotals(ProvisionalDiscountPercent).Total;
+    public decimal Change => CashTender.Change(AmountDue, AmountTendered);
+    public string? ValidateCash() => Cart.IsEmpty ? null : CashTender.Validate(AmountDue, AmountTendered);
     public Guid? PendingOperation { get; private set; }
 
     // Policies published by the API, with their conditions (minimum amount,
@@ -106,14 +113,15 @@ public sealed class CheckoutUseCase(IPosApi api)
     public string? ValidateBeforeSending(int paymentMethodId) =>
         Cart.IsEmpty ? "Agregue al menos un producto."
         : paymentMethodId <= 0 ? "Seleccione un método de pago."
-        : ValidateCustomer() ?? ValidateDiscount();
+        : ValidateCustomer() ?? ValidateDiscount() ?? ValidateCash();
 
     public SaleRequest BuildRequest(int paymentMethodId) => new(
         Cart.Lines.Select(l => new SaleLineRequest(l.Product.Id, l.Quantity)).ToList(),
         DiscountPolicyCode,
         DiscountPercent,
         paymentMethodId,
-        HasCustomer ? new SaleCustomerRequest(CustomerIdentification.Trim(), CustomerName.Trim()) : null);
+        HasCustomer ? new SaleCustomerRequest(CustomerIdentification.Trim(), CustomerName.Trim()) : null,
+        AmountTendered);
 
     public async Task<ApiResult<SaleQuoteDto>> QuoteAsync(int paymentMethodId)
     {
@@ -152,6 +160,7 @@ public sealed class CheckoutUseCase(IPosApi api)
         Cart.Clear();
         DiscountPolicyCode = "NONE";
         DiscountPercent = null;
+        AmountTendered = null;
         CustomerIdentification = "";
         CustomerName = "";
         CustomerRequired = false;
@@ -164,6 +173,7 @@ public sealed class CheckoutUseCase(IPosApi api)
         Cart.Clear();
         DiscountPolicyCode = "NONE";
         DiscountPercent = null;
+        AmountTendered = null;
         CustomerIdentification = "";
         CustomerName = "";
         CustomerRequired = false;

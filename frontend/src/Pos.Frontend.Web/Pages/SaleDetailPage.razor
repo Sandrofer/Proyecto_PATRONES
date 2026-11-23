@@ -52,9 +52,13 @@
                 <div><span>Subtotal</span><span>@Ui.Money(sale.AmountTotal - sale.AmountTax)</span></div>
                 <div><span>IVA</span><span>@Ui.Money(sale.AmountTax)</span></div>
                 <div class="grand"><span>Total</span><span>@Ui.Money(sale.AmountTotal)</span></div>
-                @foreach (var p in sale.Payments)
+                @foreach (var p in sale.Payments.Where(p => !p.IsChange))
                 {
-                    <div class="payment"><span>Pago · @p.PaymentMethodName</span><span>@Ui.Money(p.Amount)</span></div>
+                    <div class="payment"><span>Recibido · @p.PaymentMethodName</span><span>@Ui.Money(p.Amount)</span></div>
+                }
+                @if (sale.AmountReturn > 0)
+                {
+                    <div class="payment change"><span>Vuelto</span><span>@Ui.Money(sale.AmountReturn)</span></div>
                 }
             </div>
         </section>

@@ -25,6 +25,7 @@ El frontend **nunca** habla con Odoo; la API key de Odoo solo existe en el backe
 | `docker/` | `docker-compose.yml` (Odoo 20 + PostgreSQL) y `setup/setup_pos.py`. |
 | `scripts/` | Scripts de preparación y arranque. |
 | `docs/decisiones-diseno.md` | Registro de decisiones de diseño (patrones). |
+| `docs/diagramas.md` | Diagramas: despliegue, capas, Strategy, secuencia del cobro y estados de la venta. |
 
 ## Requisitos previos
 
@@ -110,8 +111,8 @@ Errores en formato ProblemDetails, en español.
 ## Pruebas
 
 ```powershell
-cd backend;  dotnet test tests\Pos.UnitTests                 # 104 pruebas: dominio, casos de uso, adaptador Odoo, login, stock, cédula, arquitectura
-cd frontend; dotnet test tests\Pos.Frontend.UnitTests        # 37 pruebas: carrito (P07), errores de la API (P08), checkout, stock, cliente
+cd backend;  dotnet test tests\Pos.UnitTests                 # 113 pruebas: dominio, casos de uso, adaptador Odoo, login, stock, cédula, arquitectura
+cd frontend; dotnet test tests\Pos.Frontend.UnitTests        # 44 pruebas: carrito (P07), errores de la API (P08), checkout, stock, cliente
 
 # P09 con Odoo REAL (crea 1 venta en Odoo):
 cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
@@ -132,6 +133,7 @@ cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
 | Extra | No vender más que el stock de Odoo (RN-09) | `StockTests`, `frontend/.../CartStockTests` |
 | Extra | Cliente con cédula ecuatoriana válida (RN-10) | `CustomerTests`, `frontend/.../CheckoutCustomerTests` |
 | Extra | Condiciones de cada descuento y límites de la venta | `DiscountRulesTests`, `frontend/.../DiscountValidationTests` |
+| Extra | Efectivo recibido y vuelto | `CashTenderTests` (backend y frontend) |
 | Extra | Caracteres especiales, usuario y decimales del descuento | `InputRulesTests`, `frontend/.../LoginInputTests` |
 | Extra | Cantidades enteras (RN-11) | `WholeQuantityTests`, `frontend/.../CartWholeQuantityTests` |
 | Extra | Login con usuarios de Odoo y permiso de POS | `LoginTests`, `OdooOperatorDirectoryTests` |
@@ -162,6 +164,11 @@ cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
   envía en silencio como consumidor final.
 - **Método de pago (RF-11).** Debe estar configurado en la sesión POS abierta de Odoo y ser de
   efectivo; cualquier otro id se rechaza (400).
+- **Efectivo recibido y vuelto (RF-11).** Campo opcional *Efectivo recibido* (vacío = monto exacto)
+  con botones de billetes sugeridos. Debe ser mayor que 0, con centavos como máximo, cubrir el
+  total y dejar un vuelto de hasta $ 100 (evita errores como 500 en vez de 5,00). La pantalla
+  muestra el vuelto al instante; Odoo guarda el pago recibido y la línea de cambio, como su propio
+  POS (pago $ 5,00, vuelto −$ 2,93).
 - **RN-11 Cantidades enteras.** Los productos se venden por unidad: no se acepta 1,5 cafés.
   El carrito lo impide y la API responde 400 indicando la línea (`lines[i].quantity`).
 

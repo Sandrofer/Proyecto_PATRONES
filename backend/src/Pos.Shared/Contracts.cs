@@ -51,7 +51,9 @@ public sealed record SaleRequest(
     decimal? DiscountPercent,
     int PaymentMethodId,
     // null = consumidor final.
-    SaleCustomerRequest? Customer = null);
+    SaleCustomerRequest? Customer = null,
+    // Cash handed over by the customer; null = exact amount (no change).
+    decimal? AmountTendered = null);
 
 // Customer identified by an Ecuadorian cedula.
 public sealed record SaleCustomerRequest(string Identification, string Name);
@@ -90,7 +92,9 @@ public sealed record SaleRegistrationDto(
     int? OrderId,
     string? OrderName,
     string? State,
-    decimal? AmountTotal);
+    decimal? AmountTotal,
+    // Change returned to the customer, as stored by Odoo.
+    decimal? Change = null);
 
 public sealed record SaleSummaryDto(
     int Id,
@@ -110,7 +114,8 @@ public sealed record SaleDetailLineDto(
     decimal SubtotalWithoutTax,
     decimal SubtotalWithTax);
 
-public sealed record SalePaymentDto(string PaymentMethodName, decimal Amount);
+// IsChange = the negative line Odoo stores for the change returned in cash.
+public sealed record SalePaymentDto(string PaymentMethodName, decimal Amount, bool IsChange = false);
 
 public sealed record SaleDetailDto(
     int Id,
@@ -125,4 +130,5 @@ public sealed record SaleDetailDto(
     decimal AmountTotal,
     decimal AmountPaid,
     IReadOnlyList<SaleDetailLineDto> Lines,
-    IReadOnlyList<SalePaymentDto> Payments);
+    IReadOnlyList<SalePaymentDto> Payments,
+    decimal AmountReturn = 0);

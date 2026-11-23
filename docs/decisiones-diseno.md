@@ -22,11 +22,34 @@ acepta decisiones aprobadas; `DiscountPolicyCatalog` recibe todas las políticas
 **Consecuencias.** + Agregar una política = 1 clase + 1 línea de registro. + Cada regla se prueba
 aislada. − Más clases; para una sola regla fija no aportaría valor (por eso no hay jerarquías extra).
 
+**Evolución: cada estrategia publica sus condiciones.** Al probar la pantalla se vio que el cajero
+podía elegir "5 % desde $100" con una compra de $2 y solo se enteraba al cobrar (la API lo
+rechazaba, pero tarde). En vez de copiar las reglas en el frontend (un `if (code == "VOLUME")` por
+descuento, que rompería Open/Closed del lado del navegador), la interfaz ganó dos miembros con
+valor por defecto:
+
+```csharp
+decimal? MinimumAmount => null;          // VolumeDiscountPolicy: 100
+bool RequiresIdentifiedCustomer => false; // StudentDiscountPolicy: true
+```
+
+`GET /api/discount-policies` los publica en `DiscountPolicyDto` y `CheckoutUseCase.ValidateDiscount()`
+los aplica de forma genérica: avisa al instante, no aplica el descuento al total provisional y
+deshabilita *Verificar* y *Cobrar*. La regla autoritativa sigue en el dominio (`Evaluate` +
+`DiscountContext.HasIdentifiedCustomer`): el navegador solo adelanta el mensaje (RF-08).
+
+- + Una política nueva con monto mínimo funciona en la pantalla sin tocar el frontend.
+- + Los miembros por defecto no obligan a modificar las políticas existentes (Open/Closed).
+- − Las condiciones que no se pueden expresar como datos (p. ej. "solo los lunes") solo se
+  validarían en la API; el mensaje llegaría al verificar, igual de claro pero más tarde.
+
 **Código.** `Pos.Domain/Discounts/DiscountPolicies.cs`, `Pos.Application/Discounts/DiscountPolicyCatalog.cs`,
-registro en `Pos.Infrastructure/DependencyContainer.cs`.
+registro en `Pos.Infrastructure/DependencyContainer.cs`, `frontend/.../UseCases.cs` (`ValidateDiscount`).
 
 **Prueba.** `DiscountExtensibilityTests.P10_A_new_policy_works_without_changing_existing_components`
-(agrega `EmployeeDiscountPolicy` sin modificar nada más), `SaleTests` (rechazo con mensaje claro).
+(agrega `EmployeeDiscountPolicy` sin modificar nada más), `SaleTests` (rechazo con mensaje claro),
+`DiscountRulesTests` (mínimo, cliente obligatorio, condiciones publicadas),
+`DiscountValidationTests` (frontend: bloqueo antes de llamar a la API).
 
 ---
 
@@ -123,6 +146,57 @@ estados con comportamiento distinto (p. ej. "en espera", "anulada", "reembolsada
 **Decisión consciente — sin Presenter:** a diferencia de NorthWind (input/output port + presenter),
 los interactors devuelven DTOs directamente. Con una sola salida (JSON) el presenter solo copiaba
 datos; los endpoints siguen sin lógica.
+
+---
+
+## D6. Efectivo recibido y vuelto — *Value Object* (DDD)
+
+**Problema.** RF-11 (pago en efectivo): el cajero necesita saber cuánto devolver, y un error de
+tipeo (500 en vez de 5,00) no debe llegar a Odoo como un vuelto de $497.
+
+**Alternativas.**
+1. Dos `decimal` sueltos (`recibido`, `vuelto`) validados en el endpoint: las reglas quedan
+   repartidas y nada impide crear un vuelto negativo en otra parte del código.
+2. Calcular el vuelto solo en el navegador: Odoo no sabría cuánto entró a caja.
+3. **Objeto de valor `CashTender`**: solo se puede crear con montos válidos y calcula el vuelto.
+
+**Elección.** `CashTender.Create(total, recibido)`: recibido opcional (vacío = monto exacto),
+mayor que cero, con centavos, que cubra el total y con vuelto ≤ $100. Al enviar a Odoo se sigue
+**su propia convención** (leída del código de `point_of_sale`): el pago lleva el monto recibido y
+`amount_return` negativo hace que Odoo cree la línea de cambio (`is_change`). Así la orden queda
+igual que si se hubiera cobrado en el POS de Odoo: pago $5,00, vuelto −$2,93, pagado $2,07.
+
+**Consecuencias.** + Imposible registrar un vuelto inválido. + El cierre de caja de Odoo cuadra
+con el efectivo real. − La regla existe dos veces (dominio del backend y una copia
+en `Pos.Frontend.Domain`), igual que la cédula: el navegador no referencia el dominio del backend
+por Clean Architecture; la API vuelve a validar.
+
+**Código.** `Pos.Domain/Sales/CashTender.cs`, `RegisterSaleInteractor.cs`, `OdooPosGateway.SubmitPaidOrderAsync`,
+`Pos.Frontend.Domain/CashTender.cs`. **Prueba.** `CashTenderTests` (backend y frontend) y una venta real
+verificada en Odoo.
+
+---
+
+## D7. Validar en el navegador *y* en la API — *Práctica* (RNF-09)
+
+**Problema.** RNF-09 pide validar entradas. Si solo valida el navegador, cualquiera puede llamar a
+la API directamente; si solo valida la API, el cajero se entera tarde.
+
+**Elección.** Las reglas de formato (búsqueda, usuario, nombre de persona, decimales) viven en
+`Pos.Shared/InputRules.cs`, que referencian ambos lados: una sola definición, dos usos. Las reglas
+de negocio (stock, cédula, descuentos, efectivo) son autoritativas en el dominio del backend; el
+frontend adelanta el mismo mensaje para dar respuesta inmediata y bloquear los botones.
+
+**Consecuencias.** + Mensajes idénticos en pantalla y en la API. + La API nunca confía en el
+navegador. − Reglas de negocio duplicadas en el frontend (cédula, efectivo), cubiertas por pruebas
+en ambos lados.
+
+**Prueba.** `InputRulesTests`, `StockAndCustomerTests`, `DiscountValidationTests`, y la revisión en
+navegador de 32 casos de entrada inválida (ver README, "Cómo probar").
+
+## Diagramas
+
+Componentes, capas y secuencia del cobro: ver [diagramas.md](diagramas.md).
 
 ## Principios SOLID aplicados
 

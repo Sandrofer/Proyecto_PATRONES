@@ -227,3 +227,12 @@ input.invalid { border-color: var(--err); background: var(--err-bg); }
 .loading-progress-text { position: absolute; text-align: center; inset: calc(30vh + 2.5rem) 0 auto .2rem; color: var(--muted); }
 .loading-progress-text:after { content: var(--blazor-load-percentage-text, "Cargando"); }
 [tabindex="-1"]:focus { outline: none; }
+
+/* Cash received and change */
+.cash { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 12px; }
+.cash .bills { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--panel); color: inherit; border-radius: 999px;
+        padding: 5px 12px; font: inherit; font-size: .85rem; cursor: pointer; }
+.chip.on { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.chip:disabled { opacity: .5; cursor: default; }
+.totals .change { font-weight: 700; color: var(--ok); }

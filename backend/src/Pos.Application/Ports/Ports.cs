@@ -39,9 +39,10 @@ public sealed record OrderSubmission(
     PosSession Session,
     PaymentMethod PaymentMethod,
     string OperatorName,
-    int? OperatorUserId);
+    int? OperatorUserId,
+    CashTender? Cash = null);
 
-public sealed record RegisteredOrder(int Id, string Name, string State, decimal AmountTotal);
+public sealed record RegisteredOrder(int Id, string Name, string State, decimal AmountTotal, decimal AmountReturn = 0);
 
 public enum IdempotencyClaimStatus { Acquired, InProgress, Completed }
 

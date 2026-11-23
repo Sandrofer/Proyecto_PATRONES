@@ -185,6 +185,27 @@
             </div>
             <Alert Message="@DiscountError" Kind="warn" />
 
+            @if (!Checkout.Cart.IsEmpty && SelectedPaymentIsCash)
+            {
+                <div class="cash">
+                    <label class="field">
+                        <span>Efectivo recibido</span>
+                        <input inputmode="decimal" maxlength="8" placeholder="Monto exacto" disabled="@Locked"
+                               class="@(CashError is null ? "" : "invalid")"
+                               value="@tenderedText"
+                               @onchange="ChangeTendered" />
+                    </label>
+                    <div class="bills">
+                        <button class="chip @(Checkout.AmountTendered is null ? "on" : "")" disabled="@Locked" @onclick="() => SetTendered(null)">Exacto</button>
+                        @foreach (var bill in Pos.Frontend.Domain.CashTender.SuggestedBills(Checkout.AmountDue))
+                        {
+                            <button class="chip @(Checkout.AmountTendered == bill ? "on" : "")" disabled="@Locked" @onclick="() => SetTendered(bill)">@Ui.Money(bill)</button>
+                        }
+                    </div>
+                </div>
+                <Alert Message="@CashError" Kind="warn" />
+            }
+
             @{
                 decimal discountShown = quote?.DiscountPercent ?? Checkout.ProvisionalDiscountPercent;
                 var provisional = Checkout.Cart.CalculateTotals(discountShown);
@@ -200,6 +221,11 @@
                     <span>Total <small class="@(quote is null ? "tag" : "tag ok")">@(quote is null ? "provisional" : "verificado")</small></span>
                     <span>@Ui.Money(quote?.AmountTotal ?? provisional.Total)</span>
                 </div>
+                @if (SelectedPaymentIsCash && Checkout.AmountTendered is decimal received && CashError is null)
+                {
+                    <div><span>Recibido</span><span>@Ui.Money(received)</span></div>
+                    <div class="change"><span>Vuelto</span><span>@Ui.Money(Checkout.Change)</span></div>
+                }
             </div>
 
             <Alert Message="@checkoutMessage" Kind="@checkoutKind" />
@@ -232,7 +258,7 @@
                     <Icon Name="receipt" Size="22" />
                     <div>
                         <strong>@lastRegistration.OrderName</strong>
-                        <span class="muted small">@Ui.StatusLabel(lastRegistration.State) · @Ui.Money(lastRegistration.AmountTotal)</span>
+                        <span class="muted small">@Ui.StatusLabel(lastRegistration.State) · @Ui.Money(lastRegistration.AmountTotal)@(lastRegistration.Change is > 0 ? $" · vuelto {Ui.Money(lastRegistration.Change.Value)}" : "")</span>
                     </div>
                     <a class="btn small" href="sales/@lastRegistration.OrderId">Ver detalle</a>
                 </div>
@@ -256,7 +282,13 @@
     bool Locked => busy || Checkout.PendingOperation is not null;
     int qtyRender;
     string? customerHint;
-    bool percentNotNumber;
+    bool percentNotNumber, tenderedNotNumber;
+    // What the cashier typed, kept even when it is not a number, so the field
+    // and the warning always match.
+    string tenderedText = "";
+
+    bool SelectedPaymentIsCash => session?.PaymentMethods.FirstOrDefault(m => m.Id == paymentMethodId)?.IsCash == true;
+    string? CashError => tenderedNotNumber ? "El efectivo recibido debe ser un número, por ejemplo 5 o 10.50." : Checkout.ValidateCash();
 
     // Live validation: the message appears as soon as the data is wrong, and
     // Verificar/Cobrar stay disabled until it is fixed.
@@ -264,7 +296,28 @@
     string? DiscountError => Checkout.Cart.IsEmpty ? null
         : percentNotNumber ? "El porcentaje de descuento debe ser un número, por ejemplo 5 o 7.5."
         : Checkout.ValidateDiscount();
-    string? BlockingError => percentNotNumber ? DiscountError : Checkout.ValidateBeforeSending(paymentMethodId);
+    string? BlockingError => percentNotNumber ? DiscountError
+        : tenderedNotNumber ? CashError
+        : Checkout.ValidateBeforeSending(paymentMethodId);
+
+    void ChangeTendered(ChangeEventArgs e)
+    {
+        checkoutMessage = null;
+        tenderedText = e.Value?.ToString() ?? "";
+        string text = tenderedText.Trim().Replace(',', '.');
+        tenderedNotNumber = text.Length > 0 && !decimal.TryParse(text, System.Globalization.NumberStyles.AllowDecimalPoint,
+            System.Globalization.CultureInfo.InvariantCulture, out _);
+        Checkout.AmountTendered = !tenderedNotNumber && text.Length > 0
+            ? decimal.Parse(text, System.Globalization.CultureInfo.InvariantCulture) : null;
+    }
+
+    void SetTendered(decimal? amount)
+    {
+        tenderedNotNumber = false;
+        checkoutMessage = null;
+        Checkout.AmountTendered = amount;
+        tenderedText = amount?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) ?? "";
+    }
 
     string CedulaClass => string.IsNullOrEmpty(Checkout.CustomerIdentification) ? ""
         : Pos.Frontend.Domain.Cedula.IsValid(Checkout.CustomerIdentification.Trim()) ? "valid" : "invalid";
@@ -410,6 +463,8 @@
         {
             lastRegistration = result.Registration;
             SetCustomerMode(false);
+            tenderedNotNumber = false;
+            tenderedText = "";
             quote = null;
             await SearchAsync();
         }
@@ -419,6 +474,8 @@
     void Discard()
     {
         Checkout.Reset();
+        tenderedNotNumber = false;
+        tenderedText = "";
         checkoutMessage = "Operación descartada. Revise el historial antes de volver a cobrar.";
         checkoutKind = "warn";
     }
