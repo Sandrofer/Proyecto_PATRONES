@@ -87,3 +87,24 @@ public class CheckoutCustomerTests
         Assert.Equal(new SaleCustomerRequest("1710034065", "Ana Torres"), checkout.BuildRequest(1).Customer);
     }
 }
+
+public class CartWholeQuantityTests
+{
+    static readonly CartProduct Coffee = new(1, "Café", "CAF-01", 1.50m, 15m, false, 10);
+
+    [Fact]
+    public void Cart_rejects_fractional_quantities_with_a_clean_message()
+    {
+        var cart = new Cart();
+        cart.Add(Coffee);
+
+        var ex = Assert.ThrowsAny<ArgumentException>(() => cart.SetQuantity(Coffee.Id, 1.5m));
+
+        Assert.Equal("La cantidad debe ser un número entero.", ex.Message);
+        Assert.Equal(1, cart.Lines[0].Quantity);
+    }
+
+    [Fact]
+    public void Cart_rejects_adding_a_fractional_quantity() =>
+        Assert.ThrowsAny<ArgumentException>(() => new Cart().Add(Coffee, 0.5m));
+}

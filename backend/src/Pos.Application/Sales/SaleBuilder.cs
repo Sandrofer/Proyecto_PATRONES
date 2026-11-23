@@ -68,8 +68,11 @@ public sealed class SaleBuilder(IPosGateway gateway, IDiscountPolicyCatalog disc
         var errors = new Dictionary<string, string[]>();
         for (int i = 0; i < request.Lines.Count; i++)
         {
-            if (request.Lines[i].Quantity <= 0)
+            decimal qty = request.Lines[i].Quantity;
+            if (qty <= 0)
                 errors[$"lines[{i}].quantity"] = ["La cantidad debe ser mayor que cero."];
+            else if (qty != decimal.Truncate(qty))
+                errors[$"lines[{i}].quantity"] = ["La cantidad debe ser un número entero."];
             if (request.Lines[i].ProductId <= 0)
                 errors[$"lines[{i}].productId"] = ["El producto no es válido."];
         }

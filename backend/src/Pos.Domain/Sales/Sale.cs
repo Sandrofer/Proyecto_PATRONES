@@ -46,6 +46,9 @@ public sealed class Sale
             throw new DomainException($"El producto '{product.Name}' no está habilitado para la venta en el POS.");
         if (quantity <= 0)
             throw new DomainException($"La cantidad de '{product.Name}' debe ser mayor que cero.");
+        // RN-11: products are sold by unit, so quantities are whole numbers.
+        if (quantity != decimal.Truncate(quantity))
+            throw new DomainException($"La cantidad de '{product.Name}' debe ser un número entero.");
 
         var existing = _lines.FirstOrDefault(l => l.Product.Id == product.Id);
         decimal total = quantity + (existing?.Quantity ?? 0);

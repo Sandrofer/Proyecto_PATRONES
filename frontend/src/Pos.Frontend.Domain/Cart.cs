@@ -36,7 +36,7 @@ public sealed class Cart
 
     public void Add(CartProduct product, decimal quantity = 1)
     {
-        EnsurePositive(quantity);
+        EnsureValidQuantity(quantity);
         int index = _lines.FindIndex(l => l.Product.Id == product.Id);
         EnsureStock(product, quantity + (index >= 0 ? _lines[index].Quantity : 0));
         if (index >= 0)
@@ -48,7 +48,7 @@ public sealed class Cart
 
     public void SetQuantity(int productId, decimal quantity)
     {
-        EnsurePositive(quantity);
+        EnsureValidQuantity(quantity);
         int index = _lines.FindIndex(l => l.Product.Id == productId);
         if (index < 0)
             throw new InvalidOperationException("El producto no está en el carrito.");
@@ -94,9 +94,12 @@ public sealed class Cart
             : $"Solo hay {available:0.##} unidades de '{product.Name}'.");
     }
 
-    static void EnsurePositive(decimal quantity)
+    // Products are sold by unit (RN-11): whole numbers greater than zero.
+    static void EnsureValidQuantity(decimal quantity)
     {
         if (quantity <= 0)
-            throw new ArgumentOutOfRangeException(nameof(quantity), "La cantidad debe ser mayor que cero.");
+            throw new ArgumentOutOfRangeException(null, "La cantidad debe ser mayor que cero.");
+        if (quantity != decimal.Truncate(quantity))
+            throw new ArgumentOutOfRangeException(null, "La cantidad debe ser un número entero.");
     }
 }

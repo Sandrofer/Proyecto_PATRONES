@@ -118,3 +118,36 @@ public class CustomerTests
         Assert.Null(sale.Customer);
     }
 }
+
+// RN-11: products are sold by unit.
+public class WholeQuantityTests
+{
+    [Theory]
+    [InlineData(1.5)]
+    [InlineData(0.25)]
+    public void Fractional_quantities_are_rejected(decimal quantity)
+    {
+        var ex = Assert.Throws<DomainException>(() => new Sale(Guid.NewGuid()).AddProduct(TestData.Coffee, quantity));
+        Assert.Contains("número entero", ex.Message);
+    }
+
+    [Fact]
+    public void Whole_quantities_written_with_decimals_are_accepted()
+    {
+        var sale = new Sale(Guid.NewGuid());
+        sale.AddProduct(TestData.Coffee, 2.0m);
+        Assert.Equal(2, sale.Lines[0].Quantity);
+    }
+
+    [Fact]
+    public async Task Api_reports_the_line_with_a_fractional_quantity()
+    {
+        var request = new SaleRequest(
+            [new SaleLineRequest(TestData.Coffee.Id, 1), new SaleLineRequest(TestData.Sandwich.Id, 1.5m)],
+            null, null, TestData.Cash.Id);
+
+        var ex = await Assert.ThrowsAsync<ValidationException>(() =>
+            TestData.Builder(TestData.Gateway()).BuildAsync(Guid.NewGuid(), request, default));
+        Assert.Equal("La cantidad debe ser un número entero.", ex.Errors["lines[1].quantity"][0]);
+    }
+}
