@@ -169,6 +169,7 @@ solo en la del backend.
 |---|---|
 | `no se puede cargar el archivo ... .ps1 porque la ejecución de scripts está deshabilitada` | Paso 2 (`Set-ExecutionPolicy`). |
 | `docker compose falló` / `Docker no respondió` | Abre Docker Desktop y espera a *Engine running*. |
+| `failed to register layer ... input/output error` al descargar Odoo | Docker no pudo escribir la imagen en su disco (no es error del proyecto). En orden: 1) libera espacio en C: (≥ 10 GB); 2) cierra Docker Desktop, ejecuta `wsl --shutdown`, ábrelo y repite `odoo-setup.ps1` (el script ya reintenta 3 veces); 3) Docker Desktop → ícono de insecto *Troubleshoot* → *Clean / Purge data* y repite; 4) excluye Docker del antivirus durante la descarga. |
 | `port is already allocated` (8069 o 5432) | Otro Odoo/PostgreSQL usa ese puerto: ciérralo o detén ese contenedor en Docker Desktop. |
 | `Failed to bind to address ... 5100` o `5200` | Ya hay una API o frontend abierto: cierra la otra ventana (o reinicia la PC). |
 | El POS dice **"Odoo sin conexión"** | Odoo está arrancando (espera ~30 s) o Docker está cerrado. |

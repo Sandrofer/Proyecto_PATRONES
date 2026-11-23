@@ -19,9 +19,48 @@ if (-not (Test-Path $envFile)) {
 }
 $dbPassword = ((Get-Content $envFile | Where-Object { $_ -like 'POSTGRES_PASSWORD=*' }) -split '=', 2)[1]
 
+$compose = @('compose', '-f', (Join-Path $docker 'docker-compose.yml'), '--project-directory', $docker)
+
+# Docker must be running before anything else.
+docker info --format '{{.ServerVersion}}' *> $null
+if ($LASTEXITCODE -ne 0) {
+    throw "Docker no responde. Abra Docker Desktop, espere a 'Engine running' y vuelva a ejecutar este script."
+}
+
+# The images need ~4 GB once extracted; Docker stores them on the system drive by default.
+$systemDrive = (Get-PSDrive ($env:SystemDrive.TrimEnd(':')))
+$freeGb = [math]::Round($systemDrive.Free / 1GB, 1)
+if ($freeGb -lt 10) {
+    Write-Host "AVISO: solo hay $freeGb GB libres en $($env:SystemDrive). Docker necesita unos 10 GB para Odoo y PostgreSQL." -ForegroundColor Yellow
+}
+
+# Download the images first, with retries: on slow or unstable connections a
+# layer can fail ("failed to register layer ... input/output error") and a
+# second attempt reuses the layers that were already downloaded.
+Write-Host "Descargando las imágenes de Odoo y PostgreSQL (la primera vez ~1 GB, puede tardar)..."
+$pulled = $false
+for ($attempt = 1; $attempt -le 3 -and -not $pulled; $attempt++) {
+    docker @compose pull
+    if ($LASTEXITCODE -eq 0) { $pulled = $true }
+    elseif ($attempt -lt 3) {
+        Write-Host "La descarga falló (intento $attempt de 3). Reintentando en 10 s..." -ForegroundColor Yellow
+        Start-Sleep -Seconds 10
+    }
+}
+if (-not $pulled) {
+    Write-Host ""
+    Write-Host "No se pudieron descargar o descomprimir las imágenes de Docker. Pruebe en este orden:" -ForegroundColor Red
+    Write-Host "  1. Libere espacio en $($env:SystemDrive) (al menos 10 GB; ahora hay $freeGb GB)."
+    Write-Host "  2. Cierre Docker Desktop, ejecute 'wsl --shutdown', ábralo de nuevo y repita este script."
+    Write-Host "  3. Docker Desktop > Troubleshoot (icono de insecto) > 'Clean / Purge data' y repita."
+    Write-Host "  4. Agregue la carpeta de Docker como exclusión del antivirus o desactívelo durante la descarga."
+    Write-Host "  Detalle en INSTALACION.md, sección 'Problemas frecuentes'."
+    throw "Falló la descarga de las imágenes de Docker (no es un error del proyecto)."
+}
+
 Write-Host "Iniciando Odoo y PostgreSQL..."
-docker compose -f (Join-Path $docker 'docker-compose.yml') --project-directory $docker up -d
-if ($LASTEXITCODE -ne 0) { throw "docker compose falló. ¿Está Docker Desktop abierto?" }
+docker @compose up -d
+if ($LASTEXITCODE -ne 0) { throw "docker compose no pudo iniciar los contenedores. Revise el mensaje anterior de Docker." }
 
 $dbArgs = "--db_host=db --db_user=odoo --db_password=$dbPassword"
 
