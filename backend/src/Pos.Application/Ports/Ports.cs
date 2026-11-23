@@ -17,6 +17,7 @@ public interface IPosGateway
     Task<RegisteredOrder> SubmitPaidOrderAsync(OrderSubmission submission, CancellationToken ct);
     Task<IReadOnlyList<SaleSummaryDto>> GetRecentOrdersAsync(int limit, CancellationToken ct);
     Task<SaleDetailDto?> GetOrderAsync(int orderId, CancellationToken ct);
+    Task<CustomerDto?> FindCustomerAsync(string identification, CancellationToken ct);
 }
 
 public sealed record PaymentMethod(int Id, string Name, bool IsCash);

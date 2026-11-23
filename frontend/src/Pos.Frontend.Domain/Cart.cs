@@ -1,7 +1,12 @@
 namespace Pos.Frontend.Domain;
 
 // Product data the cart needs. Prices are the ones Odoo reported through the API.
-public sealed record CartProduct(int Id, string Name, string? Code, decimal UnitPrice, decimal TaxPercent, bool TaxIncluded);
+// QuantityAvailable: stock reported by Odoo; null = no stock control.
+public sealed record CartProduct(int Id, string Name, string? Code, decimal UnitPrice, decimal TaxPercent, bool TaxIncluded,
+    decimal? QuantityAvailable = null)
+{
+    public bool IsOutOfStock => QuantityAvailable is <= 0;
+}
 
 public sealed record CartLine(CartProduct Product, decimal Quantity)
 {
@@ -33,6 +38,7 @@ public sealed class Cart
     {
         EnsurePositive(quantity);
         int index = _lines.FindIndex(l => l.Product.Id == product.Id);
+        EnsureStock(product, quantity + (index >= 0 ? _lines[index].Quantity : 0));
         if (index >= 0)
             _lines[index] = _lines[index] with { Quantity = _lines[index].Quantity + quantity };
         else
@@ -46,6 +52,7 @@ public sealed class Cart
         int index = _lines.FindIndex(l => l.Product.Id == productId);
         if (index < 0)
             throw new InvalidOperationException("El producto no está en el carrito.");
+        EnsureStock(_lines[index].Product, quantity);
         _lines[index] = _lines[index] with { Quantity = quantity };
         Changed?.Invoke();
     }
@@ -72,6 +79,19 @@ public sealed class Cart
             tax += t.Tax;
         }
         return new CartTotals(untaxed, tax, untaxed + tax);
+    }
+
+    public static decimal? RemainingStock(CartProduct product, decimal inCart) =>
+        product.QuantityAvailable is decimal available ? available - inCart : null;
+
+    // Same rule as the API (RN-09); the API checks it again with fresh stock.
+    static void EnsureStock(CartProduct product, decimal quantity)
+    {
+        if (product.QuantityAvailable is not decimal available || quantity <= available)
+            return;
+        throw new InvalidOperationException(available <= 0
+            ? $"'{product.Name}' está agotado."
+            : $"Solo hay {available:0.##} unidades de '{product.Name}'.");
     }
 
     static void EnsurePositive(decimal quantity)

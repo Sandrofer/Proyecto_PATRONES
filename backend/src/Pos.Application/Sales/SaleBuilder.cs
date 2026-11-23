@@ -1,6 +1,7 @@
 using Pos.Application.Discounts;
 using Pos.Application.Ports;
 using Pos.Domain;
+using Pos.Domain.Customers;
 using Pos.Domain.Sales;
 using Pos.Shared;
 
@@ -27,6 +28,7 @@ public sealed class SaleBuilder(IPosGateway gateway, IDiscountPolicyCatalog disc
         try
         {
             var sale = new Sale(reference, taxRounding);
+            sale.AssignCustomer(BuildCustomer(request.Customer));
             foreach (var line in request.Lines)
                 sale.AddProduct(products[line.ProductId], line.Quantity);
 
@@ -40,6 +42,20 @@ public sealed class SaleBuilder(IPosGateway gateway, IDiscountPolicyCatalog disc
         catch (DomainException ex)
         {
             throw ValidationException.For("sale", ex.Message);
+        }
+    }
+
+    static Customer? BuildCustomer(SaleCustomerRequest? customer)
+    {
+        if (customer is null)
+            return null;
+        try
+        {
+            return Customer.Create(customer.Identification, customer.Name);
+        }
+        catch (DomainException ex)
+        {
+            throw ValidationException.For("customer", ex.Message);
         }
     }
 

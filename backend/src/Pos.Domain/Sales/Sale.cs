@@ -1,4 +1,5 @@
 using Pos.Domain.Catalog;
+using Pos.Domain.Customers;
 using Pos.Domain.Discounts;
 
 namespace Pos.Domain.Sales;
@@ -33,6 +34,8 @@ public sealed class Sale
     public decimal DiscountPercent { get; private set; }
     public string? DiscountPolicyCode { get; private set; }
     public IReadOnlyList<SaleLine> Lines => _lines;
+    // null = consumidor final.
+    public Customer? Customer { get; private set; }
 
     public void AddProduct(CatalogProduct product, decimal quantity)
     {
@@ -45,13 +48,30 @@ public sealed class Sale
             throw new DomainException($"La cantidad de '{product.Name}' debe ser mayor que cero.");
 
         var existing = _lines.FirstOrDefault(l => l.Product.Id == product.Id);
+        decimal total = quantity + (existing?.Quantity ?? 0);
+
+        // RN-09: a storable product cannot be sold beyond the stock Odoo reports.
+        // (QuantityAvailable is null for services/consumables without stock control.)
+        if (product.QuantityAvailable is decimal available && total > available)
+            throw new DomainException(available <= 0
+                ? $"'{product.Name}' está agotado."
+                : $"Stock insuficiente de '{product.Name}': se piden {total:0.##} y hay {available:0.##}.");
+
         if (existing is not null)
         {
             _lines.Remove(existing);
-            quantity += existing.Quantity;
+            quantity = total;
         }
 
         _lines.Add(new SaleLine(product, quantity));
+    }
+
+    // RN-10: the customer is optional (consumidor final) but, when given,
+    // must have a valid cedula and name (validated by Customer.Create).
+    public void AssignCustomer(Customer? customer)
+    {
+        EnsureInPreparation();
+        Customer = customer;
     }
 
     // RN-04: the discount is decided by a policy (Strategy); the sale only

@@ -22,6 +22,10 @@ public static class Endpoints
         api.MapGet(ApiRoutes.Products, async (string? search, ISearchProductsInputPort useCase, CancellationToken ct) =>
             Results.Ok(await useCase.HandleAsync(search, ct)));
 
+        api.MapGet(ApiRoutes.Customers + "/{identification}", async (string identification,
+                Pos.Application.Customers.IFindCustomerInputPort useCase, CancellationToken ct) =>
+            Results.Ok(await useCase.HandleAsync(identification, ct)));
+
         api.MapGet(ApiRoutes.ActiveSession, async (IGetActiveSessionInputPort useCase, CancellationToken ct) =>
             Results.Ok(await useCase.HandleAsync(ct)));
 

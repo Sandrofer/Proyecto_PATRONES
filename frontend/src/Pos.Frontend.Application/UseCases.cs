@@ -22,7 +22,7 @@ public sealed class LoginUseCase(IPosApi api, IAuthSession session)
 public static class ProductMapping
 {
     public static CartProduct ToCartProduct(this ProductDto p) =>
-        new(p.Id, p.Name, p.Code, p.UnitPrice, p.TaxPercent, p.TaxIncludedInPrice);
+        new(p.Id, p.Name, p.Code, p.UnitPrice, p.TaxPercent, p.TaxIncludedInPrice, p.QuantityAvailable);
 }
 
 public sealed record CheckoutResult(bool Success, bool Uncertain, string Message, SaleRegistrationDto? Registration);
@@ -37,11 +37,29 @@ public sealed class CheckoutUseCase(IPosApi api)
     public decimal? DiscountPercent { get; set; }
     public Guid? PendingOperation { get; private set; }
 
+    // Customer: both empty = consumidor final.
+    public string CustomerIdentification { get; set; } = "";
+    public string CustomerName { get; set; } = "";
+    public bool HasCustomer => !string.IsNullOrWhiteSpace(CustomerIdentification) || !string.IsNullOrWhiteSpace(CustomerName);
+
+    // Returns an error message or null when the customer data is acceptable.
+    public string? ValidateCustomer()
+    {
+        if (!HasCustomer)
+            return null;
+        if (!Cedula.IsValid(CustomerIdentification.Trim()))
+            return "La cédula no es válida (10 dígitos, provincia y dígito verificador).";
+        if (CustomerName.Trim().Length < 3)
+            return "Ingrese el nombre del cliente (mínimo 3 letras).";
+        return null;
+    }
+
     public SaleRequest BuildRequest(int paymentMethodId) => new(
         Cart.Lines.Select(l => new SaleLineRequest(l.Product.Id, l.Quantity)).ToList(),
         DiscountPolicyCode,
         DiscountPercent,
-        paymentMethodId);
+        paymentMethodId,
+        HasCustomer ? new SaleCustomerRequest(CustomerIdentification.Trim(), CustomerName.Trim()) : null);
 
     public async Task<ApiResult<SaleQuoteDto>> QuoteAsync(int paymentMethodId)
     {
@@ -56,6 +74,8 @@ public sealed class CheckoutUseCase(IPosApi api)
             return new CheckoutResult(false, false, "Agregue al menos un producto antes de confirmar.", null);
         if (paymentMethodId <= 0)
             return new CheckoutResult(false, false, "Seleccione un método de pago.", null);
+        if (ValidateCustomer() is string customerError)
+            return new CheckoutResult(false, false, customerError, null);
 
         PendingOperation ??= Guid.NewGuid();
         var result = await api.RegisterSaleAsync(PendingOperation.Value, BuildRequest(paymentMethodId));
@@ -81,6 +101,8 @@ public sealed class CheckoutUseCase(IPosApi api)
         Cart.Clear();
         DiscountPolicyCode = "NONE";
         DiscountPercent = null;
+        CustomerIdentification = "";
+        CustomerName = "";
         return new CheckoutResult(true, false, registration.Message, registration);
     }
 
@@ -90,5 +112,7 @@ public sealed class CheckoutUseCase(IPosApi api)
         Cart.Clear();
         DiscountPolicyCode = "NONE";
         DiscountPercent = null;
+        CustomerIdentification = "";
+        CustomerName = "";
     }
 }

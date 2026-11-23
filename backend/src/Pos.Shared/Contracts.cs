@@ -5,6 +5,7 @@ namespace Pos.Shared;
 
 public static class ApiRoutes
 {
+    public const string Customers = "/api/customers";
     public const string Login = "/api/auth/login";
     public const string Products = "/api/products";
     public const string ActiveSession = "/api/pos/sessions/active";
@@ -46,7 +47,14 @@ public sealed record SaleRequest(
     IReadOnlyList<SaleLineRequest> Lines,
     string? DiscountPolicyCode,
     decimal? DiscountPercent,
-    int PaymentMethodId);
+    int PaymentMethodId,
+    // null = consumidor final.
+    SaleCustomerRequest? Customer = null);
+
+// Customer identified by an Ecuadorian cedula.
+public sealed record SaleCustomerRequest(string Identification, string Name);
+
+public sealed record CustomerDto(int Id, string Identification, string Name);
 
 public sealed record SaleLineQuoteDto(
     int ProductId,
@@ -89,7 +97,8 @@ public sealed record SaleSummaryDto(
     string State,
     decimal AmountTotal,
     string? SessionName,
-    string? CashierName);
+    string? CashierName,
+    string? CustomerName = null);
 
 public sealed record SaleDetailLineDto(
     string ProductName,
@@ -108,6 +117,8 @@ public sealed record SaleDetailDto(
     string State,
     string? SessionName,
     string? CashierName,
+    string? CustomerName,
+    string? CustomerIdentification,
     decimal AmountTax,
     decimal AmountTotal,
     decimal AmountPaid,

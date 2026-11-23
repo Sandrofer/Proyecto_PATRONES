@@ -31,6 +31,7 @@ public interface IPosApi
     Task<ApiResult<SaleRegistrationDto>> RegisterSaleAsync(Guid idempotencyKey, SaleRequest request);
     Task<ApiResult<IReadOnlyList<SaleSummaryDto>>> GetSalesAsync();
     Task<ApiResult<SaleDetailDto>> GetSaleAsync(int id);
+    Task<ApiResult<CustomerDto>> FindCustomerAsync(string identification);
 }
 
 public interface IAuthSession

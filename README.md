@@ -100,6 +100,7 @@ Cualquier clave puede darse también como variable de entorno (`Odoo__ApiKey`, e
 | POST | `/api/sales` | Registra venta + pago en efectivo. Cabecera **`Idempotency-Key`** obligatoria |
 | GET | `/api/sales` | Historial |
 | GET | `/api/sales/{id}` | Detalle |
+| GET | `/api/customers/{cedula}` | Busca un cliente en Odoo por cédula (400 si la cédula no es válida, 404 si no existe) |
 
 Respuestas de `POST /api/sales`: **201** registrada · **200** ya estaba registrada (misma clave) ·
 **202** resultado incierto (Odoo no respondió: reintentar con la misma clave) · **400** datos
@@ -109,8 +110,8 @@ Errores en formato ProblemDetails, en español.
 ## Pruebas
 
 ```powershell
-cd backend;  dotnet test tests\Pos.UnitTests                 # 38 pruebas: dominio, casos de uso, adaptador Odoo, arquitectura
-cd frontend; dotnet test tests\Pos.Frontend.UnitTests        # 12 pruebas: carrito (P07), errores de la API (P08), checkout
+cd backend;  dotnet test tests\Pos.UnitTests                 # 68 pruebas: dominio, casos de uso, adaptador Odoo, login, stock, cédula, arquitectura
+cd frontend; dotnet test tests\Pos.Frontend.UnitTests        # 22 pruebas: carrito (P07), errores de la API (P08), checkout, stock, cliente
 
 # P09 con Odoo REAL (crea 1 venta en Odoo):
 cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
@@ -128,6 +129,20 @@ cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
 | P08 | Error comprensible si falla la API | `frontend/.../ApiErrorAndCheckoutTests` |
 | P09 | Venta real de 2 productos en efectivo | `Pos.IntegrationTests` |
 | P10 | Nueva política de descuento sin tocar otros componentes | `DiscountExtensibilityTests` |
+| Extra | No vender más que el stock de Odoo (RN-09) | `StockTests`, `frontend/.../CartStockTests` |
+| Extra | Cliente con cédula ecuatoriana válida (RN-10) | `CustomerTests`, `frontend/.../CheckoutCustomerTests` |
+| Extra | Login con usuarios de Odoo y permiso de POS | `LoginTests`, `OdooOperatorDirectoryTests` |
+
+### Reglas adicionales
+
+- **RN-09 Stock.** Un producto almacenable no se vende por encima del stock que reporta Odoo
+  (`Sale.AddProduct`). El navegador marca los productos agotados y no deja pasar del disponible,
+  y la API lo vuelve a comprobar con el stock actual antes de registrar.
+- **RN-10 Cliente.** La venta es a *consumidor final* o a un cliente con **cédula ecuatoriana
+  válida** (10 dígitos, provincia 01–24 o 30, tercer dígito < 6 y dígito verificador módulo 10) y
+  nombre de solo letras (3–80). El cliente se busca en Odoo por cédula (`res.partner.vat`) o se crea
+  ahí, y la venta queda con su `partner_id`. Para crear clientes, el usuario de integración tiene el
+  permiso *Creación de contactos* (lo asigna `odoo-setup.ps1`).
 
 Verificación manual realizada contra Odoo 20 (`20.0-20261112`): venta registrada como `paid`,
 pago en efectivo, stock descontado, reenvío con la misma clave (también tras reiniciar la API)

@@ -20,7 +20,7 @@
         </header>
         <div class="search">
             <Icon Name="search" Class="search-icon" />
-            <input @bind="filter" @bind:event="oninput" placeholder="Buscar por comprobante o cajero…" aria-label="Buscar venta" />
+            <input @bind="filter" @bind:event="oninput" placeholder="Buscar por comprobante, cliente o cajero…" aria-label="Buscar venta" />
         </div>
         <Alert Message="@error" />
         @if (loading)
@@ -35,14 +35,15 @@
         {
             <div class="table-wrap">
                 <table class="table">
-                    <thead><tr><th>Comprobante</th><th>Fecha</th><th>Cajero</th><th>Estado</th><th class="num">Total</th><th></th></tr></thead>
+                    <thead><tr><th>Comprobante</th><th>Fecha</th><th>Cliente</th><th>Cajero</th><th>Estado</th><th class="num">Total</th><th></th></tr></thead>
                     <tbody>
                         @foreach (var s in Filtered)
                         {
                             <tr>
                                 <td><strong>@s.Name</strong></td>
                                 <td class="muted">@s.DateOrderUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
-                                <td>@(s.CashierName ?? "—")</td>
+                                <td>@(s.CustomerName ?? "Consumidor final")</td>
+                                <td class="muted">@(s.CashierName ?? "—")</td>
                                 <td><span class="badge @Ui.StatusClass(s.State)">@Ui.StatusLabel(s.State)</span></td>
                                 <td class="num"><strong>@Ui.Money(s.AmountTotal)</strong></td>
                                 <td class="num"><a class="btn small" href="sales/@s.Id">Detalle</a></td>
@@ -63,6 +64,7 @@
     List<SaleSummaryDto> Filtered => string.IsNullOrWhiteSpace(filter)
         ? sales
         : sales.Where(s => s.Name.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase)
+                           || (s.CustomerName?.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase) ?? false)
                            || (s.CashierName?.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase) ?? false)
                            || s.Id.ToString() == filter.Trim()).ToList();
 

@@ -52,8 +52,14 @@
                     @foreach (var p in products)
                     {
                         var inCart = Checkout.Cart.Lines.FirstOrDefault(l => l.Product.Id == p.Id)?.Quantity;
-                        <button type="button" class="product-card @(inCart is not null ? "selected" : "")" disabled="@Locked"
-                                @onclick="() => Add(p)" title="Agregar @p.Name">
+                        var soldOut = p.QuantityAvailable is decimal av && av - (inCart ?? 0) <= 0;
+                        <button type="button" class="product-card @(inCart is not null ? "selected" : "") @(soldOut ? "sold-out" : "")"
+                                disabled="@(Locked || soldOut)" @onclick="() => Add(p)"
+                                title="@(soldOut ? (inCart is null ? "Agotado" : "Ya agregó todo el stock") : "Agregar " + p.Name)">
+                            @if (p.QuantityAvailable is <= 0)
+                            {
+                                <span class="sold-out-tag">Agotado</span>
+                            }
                             @if (inCart is not null)
                             {
                                 <span class="in-cart">@Ui.Qty(inCart.Value)</span>
@@ -72,7 +78,7 @@
                             <span class="product-meta">@(p.Code ?? "sin código") · IVA @p.TaxPercent.ToString("0.##") %</span>
                             <span class="product-foot">
                                 <strong>@Ui.Money(p.UnitPrice)</strong>
-                                <span class="stock">@(p.QuantityAvailable is null ? "stock s/d" : Ui.Qty(p.QuantityAvailable.Value) + " disp.")</span>
+                                <span class="stock @(p.QuantityAvailable is > 0 and <= 5 ? "low" : "")">@(p.QuantityAvailable is null ? "stock s/d" : Ui.Qty(p.QuantityAvailable.Value) + " disp.")</span>
                             </span>
                         </button>
                     }
@@ -107,9 +113,9 @@
                             <div class="stepper">
                                 <button class="icon-btn" disabled="@(Locked || qty <= 1)" aria-label="Restar"
                                         @onclick="() => Run(() => Checkout.Cart.SetQuantity(pid, qty - 1))"><Icon Name="minus" Size="14" /></button>
-                                <input type="number" min="1" step="1" value="@qty" disabled="@Locked"
+                                <input @key="(pid, qtyRender)" type="number" min="1" step="1" value="@qty" disabled="@Locked"
                                        @onchange="e => ChangeQuantity(pid, e.Value)" aria-label="Cantidad" />
-                                <button class="icon-btn" disabled="@Locked" aria-label="Sumar"
+                                <button class="icon-btn" disabled="@(Locked || Pos.Frontend.Domain.Cart.RemainingStock(line.Product, qty) is <= 0)" aria-label="Sumar"
                                         @onclick="() => Run(() => Checkout.Cart.SetQuantity(pid, qty + 1))"><Icon Name="plus" Size="14" /></button>
                             </div>
                             <span class="cart-sub">@Ui.Money(quote?.Lines.FirstOrDefault(q => q.ProductId == pid)?.SubtotalWithTax ?? line.Subtotal)</span>
@@ -119,6 +125,34 @@
                 </ul>
             }
             <Alert Message="@cartError" />
+
+            <fieldset class="customer">
+                <legend><Icon Name="user" Size="15" /> Cliente</legend>
+                <div class="segmented">
+                    <button type="button" class="@(customerMode ? "" : "on")" disabled="@Locked" @onclick="() => SetCustomerMode(false)">Consumidor final</button>
+                    <button type="button" class="@(customerMode ? "on" : "")" disabled="@Locked" @onclick="() => SetCustomerMode(true)">Con cédula</button>
+                </div>
+                @if (customerMode)
+                {
+                    <div class="form-grid tight">
+                        <label class="field">
+                            <span>Cédula</span>
+                            <input value="@Checkout.CustomerIdentification" inputmode="numeric" maxlength="10" placeholder="1710034065"
+                                   disabled="@Locked" class="@CedulaClass" @onchange="ChangeCedulaAsync" />
+                        </label>
+                        <label class="field">
+                            <span>Nombre</span>
+                            <input value="@Checkout.CustomerName" placeholder="Nombre y apellido" maxlength="80" disabled="@Locked"
+                                   @onchange="ChangeCustomerName" />
+                        </label>
+                    </div>
+                    @if (customerHint is not null)
+                    {
+                        <p class="hint ok"><Icon Name="check" Size="14" /> @customerHint</p>
+                    }
+                    <Alert Message="@customerError" Kind="warn" />
+                }
+            </fieldset>
 
             <div class="form-grid">
                 <label class="field">
@@ -216,6 +250,50 @@
     string checkoutKind = "error";
 
     bool Locked => busy || Checkout.PendingOperation is not null;
+    bool customerMode;
+    int qtyRender;
+    string? customerError, customerHint;
+
+    string CedulaClass => string.IsNullOrEmpty(Checkout.CustomerIdentification) ? ""
+        : Pos.Frontend.Domain.Cedula.IsValid(Checkout.CustomerIdentification.Trim()) ? "valid" : "invalid";
+
+    void SetCustomerMode(bool on)
+    {
+        customerMode = on;
+        customerError = customerHint = null;
+        if (!on)
+        {
+            Checkout.CustomerIdentification = "";
+            Checkout.CustomerName = "";
+        }
+    }
+
+    void ChangeCustomerName(ChangeEventArgs e)
+    {
+        Checkout.CustomerName = e.Value?.ToString() ?? "";
+        customerError = Checkout.ValidateCustomer();
+    }
+
+    // Validates the cedula and, if the customer already exists in Odoo, fills the name.
+    async Task ChangeCedulaAsync(ChangeEventArgs e)
+    {
+        Checkout.CustomerIdentification = (e.Value?.ToString() ?? "").Trim();
+        customerHint = null;
+        if (!Pos.Frontend.Domain.Cedula.IsValid(Checkout.CustomerIdentification))
+        {
+            customerError = "La cédula no es válida (10 dígitos, provincia y dígito verificador).";
+            return;
+        }
+        customerError = null;
+        var found = await Api.FindCustomerAsync(Checkout.CustomerIdentification);
+        if (found.Value is not null)
+        {
+            Checkout.CustomerName = found.Value.Name;
+            customerHint = "Cliente encontrado en Odoo.";
+        }
+        else if (found.StatusCode == 404)
+            customerHint = "Cliente nuevo: se creará en Odoo al cobrar.";
+    }
     DiscountPolicyDto? SelectedPolicy => policies.FirstOrDefault(p => p.Code == Checkout.DiscountPolicyCode);
 
     protected override async Task OnInitializedAsync()
@@ -254,6 +332,7 @@
                 System.Globalization.CultureInfo.InvariantCulture, out var qty) || qty <= 0)
         {
             cartError = "La cantidad debe ser un número mayor que cero.";
+            qtyRender++;
             return;
         }
         Run(() => Checkout.Cart.SetQuantity(productId, qty));
@@ -283,6 +362,7 @@
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
             cartError = ex.Message;
+            qtyRender++; // redraw the input with the real quantity
         }
     }
 
@@ -305,6 +385,7 @@
         if (result.Success)
         {
             lastRegistration = result.Registration;
+            SetCustomerMode(false);
             quote = null;
             await SearchAsync();
         }

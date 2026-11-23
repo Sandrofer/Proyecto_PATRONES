@@ -39,6 +39,9 @@ public sealed class HttpPosApi(HttpClient http, IAuthSession session) : IPosApi
     public Task<ApiResult<SaleDetailDto>> GetSaleAsync(int id) =>
         SendAsync<SaleDetailDto>(HttpMethod.Get, $"{ApiRoutes.Sales}/{id}");
 
+    public Task<ApiResult<CustomerDto>> FindCustomerAsync(string identification) =>
+        SendAsync<CustomerDto>(HttpMethod.Get, $"{ApiRoutes.Customers}/{Uri.EscapeDataString(identification)}");
+
     async Task<ApiResult<T>> SendAsync<T>(HttpMethod method, string url, object? body = null,
         bool authenticated = true, Action<HttpRequestMessage>? headers = null)
     {

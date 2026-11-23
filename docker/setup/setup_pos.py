@@ -92,7 +92,9 @@ if not user:
         'company_id': company.id,
         'company_ids': [(6, 0, [company.id])],
     })
-user.write({groups_field: [(4, pos_user_group.id), (4, stock_user_group.id)]})
+# Contact creation: the API registers customers (identified by cedula) in Odoo.
+partner_manager_group = env.ref('base.group_partner_manager')
+user.write({groups_field: [(4, pos_user_group.id), (4, stock_user_group.id), (4, partner_manager_group.id)]})
 
 # 6. Open a POS session if there is none.
 session = env['pos.session'].search([('config_id', '=', config.id), ('state', '!=', 'closed')], limit=1)

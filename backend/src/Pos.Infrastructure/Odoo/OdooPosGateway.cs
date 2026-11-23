@@ -111,8 +111,13 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
             }));
         }
 
+        // Customer: found in Odoo by cedula (vat) or created. null = consumidor final.
+        int? partnerId = sale.Customer is null ? null
+            : await FindOrCreatePartnerAsync(sale.Customer.Identification.Value, sale.Customer.Name, ct);
+
         var order = new JsonObject
         {
+            ["partner_id"] = partnerId,
             ["uuid"] = sale.Reference.ToString(),
             ["session_id"] = submission.Session.Id,
             ["state"] = "paid",
@@ -147,22 +152,25 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
     {
         var rows = await SearchReadAsync("pos.order",
             new JsonArray(Cond("config_id", "=", _configId)),
-            ["id", "name", "date_order", "state", "amount_total", "session_id", "user_id"], ct, limit, "date_order desc, id desc");
+            ["id", "name", "date_order", "state", "amount_total", "session_id", "user_id", "partner_id"], ct, limit, "date_order desc, id desc");
 
         return rows.Select(r => new SaleSummaryDto(
             Int(r!["id"]), Str(r["name"]) ?? "", Date(r["date_order"]), Str(r["state"]) ?? "",
-            Dec(r["amount_total"]), Many2OneName(r["session_id"]), Many2OneName(r["user_id"]))).ToList();
+            Dec(r["amount_total"]), Many2OneName(r["session_id"]), Many2OneName(r["user_id"]), Many2OneName(r["partner_id"]))).ToList();
     }
 
     public async Task<SaleDetailDto?> GetOrderAsync(int orderId, CancellationToken ct)
     {
         var rows = await SearchReadAsync("pos.order",
             new JsonArray(Cond("id", "=", orderId), Cond("config_id", "=", _configId)),
-            ["id", "name", "date_order", "state", "amount_total", "amount_tax", "amount_paid", "session_id", "user_id"], ct, 1);
+            ["id", "name", "date_order", "state", "amount_total", "amount_tax", "amount_paid", "session_id", "user_id", "partner_id"], ct, 1);
         if (rows.Count == 0)
             return null;
 
         var o = rows[0]!;
+        int partnerId = Many2OneId(o["partner_id"]);
+        string? customerId = partnerId == 0 ? null : Str((await SearchReadAsync("res.partner",
+            new JsonArray(Cond("id", "=", partnerId)), ["vat"], ct, 1)).FirstOrDefault()?["vat"]);
         var lines = await SearchReadAsync("pos.order.line", new JsonArray(Cond("order_id", "=", orderId)),
             ["full_product_name", "product_id", "qty", "price_unit", "discount", "price_subtotal", "price_subtotal_incl"], ct);
         var payments = await SearchReadAsync("pos.payment", new JsonArray(Cond("pos_order_id", "=", orderId)),
@@ -170,12 +178,32 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
 
         return new SaleDetailDto(
             Int(o["id"]), Str(o["name"]) ?? "", Date(o["date_order"]), Str(o["state"]) ?? "",
-            Many2OneName(o["session_id"]), Many2OneName(o["user_id"]), Dec(o["amount_tax"]), Dec(o["amount_total"]), Dec(o["amount_paid"]),
+            Many2OneName(o["session_id"]), Many2OneName(o["user_id"]),
+            Many2OneName(o["partner_id"]), customerId, Dec(o["amount_tax"]), Dec(o["amount_total"]), Dec(o["amount_paid"]),
             lines.Select(l => new SaleDetailLineDto(
                 Str(l!["full_product_name"]) ?? Many2OneName(l["product_id"]) ?? "",
                 Dec(l["qty"]), Dec(l["price_unit"]), Dec(l["discount"]),
                 Dec(l["price_subtotal"]), Dec(l["price_subtotal_incl"]))).ToList(),
             payments.Select(p => new SalePaymentDto(Many2OneName(p!["payment_method_id"]) ?? "", Dec(p["amount"]))).ToList());
+    }
+
+    public async Task<CustomerDto?> FindCustomerAsync(string identification, CancellationToken ct)
+    {
+        var rows = await SearchReadAsync("res.partner", new JsonArray(Cond("vat", "=", identification)),
+            ["id", "name", "vat"], ct, 1, "id asc");
+        return rows.Count == 0 ? null
+            : new CustomerDto(Int(rows[0]!["id"]), Str(rows[0]!["vat"]) ?? identification, Str(rows[0]!["name"]) ?? "");
+    }
+
+    async Task<int> FindOrCreatePartnerAsync(string identification, string name, CancellationToken ct)
+    {
+        var existing = await FindCustomerAsync(identification, ct);
+        if (existing is not null)
+            return existing.Id;
+
+        var created = await odoo.CallAsync("res.partner", "create",
+            new { vals_list = new[] { new { name, vat = identification, customer_rank = 1 } } }, ct);
+        return created is JsonArray a && a.Count > 0 ? Int(a[0]) : Int(created);
     }
 
     async Task<RegisteredOrder?> FindAnyOrderAsync(Guid reference, CancellationToken ct)

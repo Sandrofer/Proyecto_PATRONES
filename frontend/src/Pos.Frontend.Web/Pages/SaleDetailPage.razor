@@ -23,6 +23,8 @@
             </header>
 
             <div class="meta-row">
+                <div><span class="muted small">Cliente</span><strong>@(sale.CustomerName ?? "Consumidor final")</strong>
+                    @if (sale.CustomerIdentification is not null) { <span class="muted small">C.I. @sale.CustomerIdentification</span> }</div>
                 <div><span class="muted small">Cajero</span><strong>@(sale.CashierName ?? "—")</strong></div>
                 <div><span class="muted small">Sesión de caja</span><strong>@(sale.SessionName ?? "—")</strong></div>
             </div>
