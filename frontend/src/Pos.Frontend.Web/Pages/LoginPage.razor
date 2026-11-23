@@ -2,15 +2,29 @@
 @inject LoginUseCase Login
 @inject NavigationManager Nav
 
-<PageTitle>Iniciar sesión</PageTitle>
+<PageTitle>Iniciar sesión · POS</PageTitle>
 
 <div class="login">
-    <form class="panel" @onsubmit="SubmitAsync">
-        <h2>Iniciar sesión</h2>
-        <label>Usuario <input @bind="username" autocomplete="username" /></label>
-        <label>Contraseña <input type="password" @bind="password" autocomplete="current-password" /></label>
+    <div class="login-art">
+        <span class="brand-mark big"><Icon Name="coffee" Size="34" /></span>
+        <h1>Cafetería UTA</h1>
+        <p>Punto de venta conectado a Odoo 20. Cobre rápido: precios, impuestos, caja e inventario se registran en Odoo.</p>
+    </div>
+    <form class="login-card" @onsubmit="SubmitAsync">
+        <h2>Iniciar turno</h2>
+        <p class="muted">Use su usuario de Odoo con permiso de Punto de venta.</p>
+        <label class="field">
+            <span>Usuario</span>
+            <input @bind="username" autocomplete="username" placeholder="cajero1" autofocus />
+        </label>
+        <label class="field">
+            <span>Contraseña</span>
+            <input type="password" @bind="password" autocomplete="current-password" placeholder="••••••••" />
+        </label>
         <Alert Message="@error" />
-        <button type="submit" class="btn primary" disabled="@busy">@(busy ? "Ingresando…" : "Ingresar")</button>
+        <button type="submit" class="btn primary block" disabled="@busy">
+            @(busy ? "Verificando con Odoo…" : "Ingresar")
+        </button>
     </form>
 </div>
 

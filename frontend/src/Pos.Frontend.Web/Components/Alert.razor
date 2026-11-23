@@ -1,6 +1,9 @@
 @if (!string.IsNullOrWhiteSpace(Message))
 {
-    <div class="alert @Kind" role="alert">@Message</div>
+    <div class="alert @Kind" role="@(Kind == "error" ? "alert" : "status")">
+        <Icon Name="@(Kind == "ok" ? "check" : "alert")" />
+        <span>@Message</span>
+    </div>
 }
 
 @code {

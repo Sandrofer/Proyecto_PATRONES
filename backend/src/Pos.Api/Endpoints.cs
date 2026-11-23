@@ -13,8 +13,8 @@ public static class Endpoints
 {
     public static WebApplication MapPosEndpoints(this WebApplication app)
     {
-        app.MapPost(ApiRoutes.Login, (LoginRequest request, ILoginInputPort login) =>
-            Results.Ok(login.Handle(request)))
+        app.MapPost(ApiRoutes.Login, async (LoginRequest request, ILoginInputPort login, CancellationToken ct) =>
+            Results.Ok(await login.HandleAsync(request, ct)))
             .RequireRateLimiting("login");
 
         var api = app.MapGroup("").RequireAuthorization();

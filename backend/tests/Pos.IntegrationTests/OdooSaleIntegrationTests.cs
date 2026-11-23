@@ -28,6 +28,7 @@ public class OdooSaleIntegrationTests
     sealed class TestOperator : ICurrentOperator
     {
         public string Name => "prueba-integracion";
+        public int? OdooUserId => null;
     }
 
     static OdooPosGateway CreateGateway()

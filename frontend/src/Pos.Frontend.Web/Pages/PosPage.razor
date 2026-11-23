@@ -9,20 +9,24 @@
 
 <AuthGuard>
     <div class="pos-grid">
-        <section class="panel">
+        <section class="panel catalog">
             <header class="panel-head">
-                <h2>Productos</h2>
+                <div>
+                    <h2>Productos</h2>
+                    <p class="muted small">Precios e impuestos vienen de Odoo</p>
+                </div>
                 @if (session is not null)
                 {
-                    <span class="badge ok">Sesión @session.Name abierta</span>
+                    <span class="badge ok"><span class="dot"></span> @session.Name</span>
                 }
                 else if (sessionError is not null)
                 {
-                    <span class="badge error">@sessionError</span>
+                    <span class="badge error"><span class="dot"></span> @sessionError</span>
                 }
             </header>
 
             <form class="search" @onsubmit="SearchAsync">
+                <Icon Name="search" Class="search-icon" />
                 <input @bind="search" placeholder="Buscar por nombre o código…" aria-label="Buscar producto" />
                 <button type="submit" class="btn" disabled="@searching">Buscar</button>
             </form>
@@ -31,65 +35,94 @@
 
             @if (searching)
             {
-                <p class="muted">Consultando Odoo…</p>
+                <div class="product-grid">
+                    @for (int i = 0; i < 4; i++)
+                    {
+                        <div class="product-card skeleton"></div>
+                    }
+                </div>
             }
             else if (products.Count == 0)
             {
-                <p class="muted">No hay productos que coincidan.</p>
+                <div class="empty"><Icon Name="search" Size="32" /><p>No hay productos que coincidan.</p></div>
             }
             else
             {
-                <table class="table">
-                    <thead><tr><th></th><th>Producto</th><th>Código</th><th class="num">Precio</th><th class="num">IVA</th><th class="num">Disponible</th><th></th></tr></thead>
-                    <tbody>
-                        @foreach (var p in products)
-                        {
-                            <tr>
-                                <td>@if (p.ImageDataUrl is not null) { <img class="thumb" src="@p.ImageDataUrl" alt="" /> } else { <span class="thumb"></span> }</td>
-                                <td>@p.Name</td>
-                                <td class="muted">@(p.Code ?? "—")</td>
-                                <td class="num">@p.UnitPrice.ToString("N2")</td>
-                                <td class="num">@p.TaxPercent.ToString("0.##") %@(p.TaxIncludedInPrice ? " incl." : "")</td>
-                                <td class="num">@(p.QuantityAvailable?.ToString("0.##") ?? "s/d")</td>
-                                <td><button class="btn small" disabled="@Locked" @onclick="() => Add(p)">Agregar</button></td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+                <div class="product-grid">
+                    @foreach (var p in products)
+                    {
+                        var inCart = Checkout.Cart.Lines.FirstOrDefault(l => l.Product.Id == p.Id)?.Quantity;
+                        <button type="button" class="product-card @(inCart is not null ? "selected" : "")" disabled="@Locked"
+                                @onclick="() => Add(p)" title="Agregar @p.Name">
+                            @if (inCart is not null)
+                            {
+                                <span class="in-cart">@Ui.Qty(inCart.Value)</span>
+                            }
+                            <span class="product-img">
+                                @if (p.ImageDataUrl is not null)
+                                {
+                                    <img src="@p.ImageDataUrl" alt="" />
+                                }
+                                else
+                                {
+                                    <Icon Name="coffee" Size="28" />
+                                }
+                            </span>
+                            <span class="product-name">@p.Name</span>
+                            <span class="product-meta">@(p.Code ?? "sin código") · IVA @p.TaxPercent.ToString("0.##") %</span>
+                            <span class="product-foot">
+                                <strong>@Ui.Money(p.UnitPrice)</strong>
+                                <span class="stock">@(p.QuantityAvailable is null ? "stock s/d" : Ui.Qty(p.QuantityAvailable.Value) + " disp.")</span>
+                            </span>
+                        </button>
+                    }
+                </div>
             }
         </section>
 
-        <section class="panel">
-            <header class="panel-head"><h2>Venta en preparación</h2></header>
+        <section class="panel cart">
+            <header class="panel-head">
+                <div>
+                    <h2><Icon Name="cart" /> Venta actual</h2>
+                    <p class="muted small">@Checkout.Cart.Lines.Count producto(s)</p>
+                </div>
+            </header>
 
             @if (Checkout.Cart.IsEmpty)
             {
-                <p class="muted">El carrito está vacío.</p>
+                <div class="empty"><Icon Name="cart" Size="32" /><p>Toque un producto para agregarlo.</p></div>
             }
             else
             {
-                <table class="table">
-                    <thead><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Subtotal</th><th></th></tr></thead>
-                    <tbody>
-                        @foreach (var line in Checkout.Cart.Lines)
-                        {
-                            <tr>
-                                <td>@line.Product.Name<div class="muted small">@line.Product.UnitPrice.ToString("N2") c/u</div></td>
-                                <td class="num">
-                                    <input type="number" min="1" step="1" class="qty" value="@line.Quantity" disabled="@Locked"
-                                           @onchange="e => ChangeQuantity(line.Product.Id, e.Value)" aria-label="Cantidad" />
-                                </td>
-                                <td class="num">@((quote?.Lines.FirstOrDefault(q => q.ProductId == line.Product.Id)?.SubtotalWithTax ?? line.Subtotal).ToString("N2"))</td>
-                                <td><button class="btn small danger" disabled="@Locked" @onclick="() => Remove(line.Product.Id)" aria-label="Quitar">✕</button></td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+                <ul class="cart-lines">
+                    @foreach (var line in Checkout.Cart.Lines)
+                    {
+                        var pid = line.Product.Id;
+                        var qty = line.Quantity;
+                        <li>
+                            <div class="cart-info">
+                                <span class="cart-name">@line.Product.Name</span>
+                                <span class="muted small">@Ui.Money(line.Product.UnitPrice) c/u</span>
+                            </div>
+                            <div class="stepper">
+                                <button class="icon-btn" disabled="@(Locked || qty <= 1)" aria-label="Restar"
+                                        @onclick="() => Run(() => Checkout.Cart.SetQuantity(pid, qty - 1))"><Icon Name="minus" Size="14" /></button>
+                                <input type="number" min="1" step="1" value="@qty" disabled="@Locked"
+                                       @onchange="e => ChangeQuantity(pid, e.Value)" aria-label="Cantidad" />
+                                <button class="icon-btn" disabled="@Locked" aria-label="Sumar"
+                                        @onclick="() => Run(() => Checkout.Cart.SetQuantity(pid, qty + 1))"><Icon Name="plus" Size="14" /></button>
+                            </div>
+                            <span class="cart-sub">@Ui.Money(quote?.Lines.FirstOrDefault(q => q.ProductId == pid)?.SubtotalWithTax ?? line.Subtotal)</span>
+                            <button class="icon-btn danger" disabled="@Locked" @onclick="() => Remove(pid)" aria-label="Quitar"><Icon Name="trash" Size="15" /></button>
+                        </li>
+                    }
+                </ul>
             }
             <Alert Message="@cartError" />
 
-            <div class="field-row">
-                <label>Descuento
+            <div class="form-grid">
+                <label class="field">
+                    <span>Descuento</span>
                     <select value="@Checkout.DiscountPolicyCode" disabled="@Locked" @onchange="ChangePolicy">
                         @foreach (var policy in policies)
                         {
@@ -99,15 +132,14 @@
                 </label>
                 @if (SelectedPolicy?.RequiresPercent == true)
                 {
-                    <label>Porcentaje
-                        <input type="number" min="0" step="0.5" class="qty" disabled="@Locked"
+                    <label class="field">
+                        <span>Porcentaje</span>
+                        <input type="number" min="0" step="0.5" disabled="@Locked"
                                value="@Checkout.DiscountPercent" @onchange="ChangePercent" />
                     </label>
                 }
-            </div>
-
-            <div class="field-row">
-                <label>Método de pago
+                <label class="field">
+                    <span>Método de pago</span>
                     <select @bind="paymentMethodId" disabled="@Locked">
                         <option value="0">Seleccione…</option>
                         @foreach (var m in session?.PaymentMethods ?? [])
@@ -118,16 +150,18 @@
                 </label>
             </div>
 
+            @{ var provisional = Checkout.Cart.CalculateTotals(quote?.DiscountPercent ?? 0); }
             <div class="totals">
-                @{ var provisional = Checkout.Cart.CalculateTotals(quote?.DiscountPercent ?? 0); }
-                <div><span>Subtotal</span><span>@(quote?.AmountUntaxed.ToString("N2") ?? provisional.Untaxed.ToString("N2"))</span></div>
-                <div><span>Impuestos</span><span>@(quote?.AmountTax.ToString("N2") ?? provisional.Tax.ToString("N2"))</span></div>
+                <div><span>Subtotal</span><span>@Ui.Money(quote?.AmountUntaxed ?? provisional.Untaxed)</span></div>
+                <div><span>IVA</span><span>@Ui.Money(quote?.AmountTax ?? provisional.Tax)</span></div>
                 @if (quote is { DiscountPercent: > 0 })
                 {
-                    <div><span>Descuento aplicado</span><span>@quote.DiscountPercent.ToString("0.##") %</span></div>
+                    <div class="discount"><span>Descuento aplicado</span><span>@quote.DiscountPercent.ToString("0.##") %</span></div>
                 }
-                <div class="grand"><span>Total @(quote is null ? "(provisional)" : "(verificado)")</span>
-                    <span>@(quote?.AmountTotal.ToString("N2") ?? provisional.Total.ToString("N2"))</span></div>
+                <div class="grand">
+                    <span>Total <small class="@(quote is null ? "tag" : "tag ok")">@(quote is null ? "provisional" : "verificado")</small></span>
+                    <span>@Ui.Money(quote?.AmountTotal ?? provisional.Total)</span>
+                </div>
             </div>
 
             <Alert Message="@checkoutMessage" Kind="@checkoutKind" />
@@ -135,14 +169,21 @@
             <div class="actions">
                 @if (Checkout.PendingOperation is not null)
                 {
-                    <button class="btn primary" disabled="@busy" @onclick="ConfirmAsync">Reintentar</button>
                     <button class="btn" disabled="@busy" @onclick="Discard">Descartar</button>
+                    <button class="btn primary" disabled="@busy" @onclick="ConfirmAsync"><Icon Name="refresh" /> Reintentar</button>
                 }
                 else
                 {
                     <button class="btn" disabled="@(busy || Checkout.Cart.IsEmpty)" @onclick="QuoteAsync">Verificar total</button>
-                    <button class="btn primary" disabled="@(busy || Checkout.Cart.IsEmpty || session is null)" @onclick="ConfirmAsync">
-                        @(busy ? "Registrando…" : "Confirmar venta")
+                    <button class="btn primary big" disabled="@(busy || Checkout.Cart.IsEmpty || session is null)" @onclick="ConfirmAsync">
+                        @if (busy)
+                        {
+                            <span class="spinner"></span> <span>Registrando…</span>
+                        }
+                        else
+                        {
+                            <Icon Name="check" /> <span>Cobrar @Ui.Money(quote?.AmountTotal ?? provisional.Total)</span>
+                        }
                     </button>
                 }
             </div>
@@ -150,9 +191,12 @@
             @if (lastRegistration is { OrderId: not null })
             {
                 <div class="receipt">
-                    <strong>Venta @lastRegistration.OrderName</strong> · id @lastRegistration.OrderId ·
-                    estado <em>@lastRegistration.State</em> · total @lastRegistration.AmountTotal?.ToString("N2")
-                    <a href="sales/@lastRegistration.OrderId">Ver detalle</a>
+                    <Icon Name="receipt" Size="22" />
+                    <div>
+                        <strong>@lastRegistration.OrderName</strong>
+                        <span class="muted small">@Ui.StatusLabel(lastRegistration.State) · @Ui.Money(lastRegistration.AmountTotal)</span>
+                    </div>
+                    <a class="btn small" href="sales/@lastRegistration.OrderId">Ver detalle</a>
                 </div>
             }
         </section>

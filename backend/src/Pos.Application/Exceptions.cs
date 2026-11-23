@@ -14,6 +14,10 @@ public sealed class NotFoundException(string message) : Exception(message);
 
 public sealed class AuthenticationFailedException() : Exception("Usuario o contraseña incorrectos.");
 
+// Valid Odoo user, but without the Point of Sale permission (403).
+public sealed class OperatorNotAuthorizedException()
+    : Exception("Su usuario de Odoo no tiene permiso de Punto de venta. Pida al administrador que se lo asigne.");
+
 // Another request with the same Idempotency-Key is still running (409).
 public sealed class OperationInProgressException()
     : Exception("Esta venta ya se está procesando. Espere unos segundos y consulte el resultado.");

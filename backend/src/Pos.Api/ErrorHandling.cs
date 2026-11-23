@@ -15,6 +15,7 @@ public sealed class ProblemDetailsExceptionHandler(IProblemDetailsService proble
         {
             ValidationException => (StatusCodes.Status400BadRequest, "Datos no válidos"),
             AuthenticationFailedException => (StatusCodes.Status401Unauthorized, "Acceso denegado"),
+            OperatorNotAuthorizedException => (StatusCodes.Status403Forbidden, "Sin permiso de Punto de venta"),
             NotFoundException => (StatusCodes.Status404NotFound, "No encontrado"),
             OperationInProgressException => (StatusCodes.Status409Conflict, "Operación en curso"),
             ExternalServiceRejectedException => (StatusCodes.Status502BadGateway, "Odoo rechazó la operación"),

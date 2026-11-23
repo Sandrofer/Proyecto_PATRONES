@@ -78,7 +78,8 @@ public sealed class RegisterSaleInteractor(
             throw ValidationException.For("sale", ex.Message);
         }
 
-        var submission = new OrderSubmission(sale, sale.CalculateTotals(), session, paymentMethod, currentOperator.Name);
+        var submission = new OrderSubmission(sale, sale.CalculateTotals(), session, paymentMethod,
+            currentOperator.Name, currentOperator.OdooUserId);
 
         try
         {

@@ -4,39 +4,53 @@
 <PageTitle>Historial de ventas</PageTitle>
 
 <AuthGuard>
+    <div class="stats">
+        <div class="stat"><span class="muted small">Ventas mostradas</span><strong>@Filtered.Count</strong></div>
+        <div class="stat"><span class="muted small">Total vendido</span><strong>@Ui.Money(Filtered.Sum(s => s.AmountTotal))</strong></div>
+        <div class="stat"><span class="muted small">Ticket promedio</span><strong>@Ui.Money(Filtered.Count == 0 ? 0 : Filtered.Average(s => s.AmountTotal))</strong></div>
+    </div>
+
     <section class="panel">
         <header class="panel-head">
-            <h2>Historial de ventas (Odoo)</h2>
-            <button class="btn small" @onclick="LoadAsync" disabled="@loading">Actualizar</button>
+            <div>
+                <h2><Icon Name="history" /> Historial de ventas</h2>
+                <p class="muted small">Leído directamente de Odoo · últimas 50</p>
+            </div>
+            <button class="btn small" @onclick="LoadAsync" disabled="@loading"><Icon Name="refresh" /> Actualizar</button>
         </header>
-        <input class="filter" @bind="filter" @bind:event="oninput" placeholder="Buscar por número de comprobante…" aria-label="Buscar venta" />
+        <div class="search">
+            <Icon Name="search" Class="search-icon" />
+            <input @bind="filter" @bind:event="oninput" placeholder="Buscar por comprobante o cajero…" aria-label="Buscar venta" />
+        </div>
         <Alert Message="@error" />
         @if (loading)
         {
-            <p class="muted">Consultando Odoo…</p>
+            <div class="empty"><span class="spinner dark"></span><p>Consultando Odoo…</p></div>
         }
         else if (Filtered.Count == 0)
         {
-            <p class="muted">No hay ventas que mostrar.</p>
+            <div class="empty"><Icon Name="receipt" Size="32" /><p>No hay ventas que mostrar.</p></div>
         }
         else
         {
-            <table class="table">
-                <thead><tr><th>Comprobante</th><th>Fecha</th><th>Sesión</th><th>Estado</th><th class="num">Total</th><th></th></tr></thead>
-                <tbody>
-                    @foreach (var s in Filtered)
-                    {
-                        <tr>
-                            <td>@s.Name</td>
-                            <td>@s.DateOrderUtc.ToLocalTime().ToString("g")</td>
-                            <td class="muted">@s.SessionName</td>
-                            <td><span class="badge">@s.State</span></td>
-                            <td class="num">@s.AmountTotal.ToString("N2")</td>
-                            <td><a href="sales/@s.Id">Detalle</a></td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Comprobante</th><th>Fecha</th><th>Cajero</th><th>Estado</th><th class="num">Total</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var s in Filtered)
+                        {
+                            <tr>
+                                <td><strong>@s.Name</strong></td>
+                                <td class="muted">@s.DateOrderUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                <td>@(s.CashierName ?? "—")</td>
+                                <td><span class="badge @Ui.StatusClass(s.State)">@Ui.StatusLabel(s.State)</span></td>
+                                <td class="num"><strong>@Ui.Money(s.AmountTotal)</strong></td>
+                                <td class="num"><a class="btn small" href="sales/@s.Id">Detalle</a></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         }
     </section>
 </AuthGuard>
@@ -49,6 +63,7 @@
     List<SaleSummaryDto> Filtered => string.IsNullOrWhiteSpace(filter)
         ? sales
         : sales.Where(s => s.Name.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase)
+                           || (s.CashierName?.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase) ?? false)
                            || s.Id.ToString() == filter.Trim()).ToList();
 
     protected override Task OnInitializedAsync() => LoadAsync();

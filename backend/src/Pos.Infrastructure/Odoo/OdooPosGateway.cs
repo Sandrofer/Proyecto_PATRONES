@@ -121,6 +121,8 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
             ["amount_total"] = totals.AmountTotal,
             ["amount_paid"] = totals.AmountTotal,
             ["amount_return"] = 0,
+            // The cashier (Odoo user) who made the sale.
+            ["user_id"] = submission.OperatorUserId is int uid ? uid : null,
             ["lines"] = lines,
             ["payment_ids"] = new JsonArray(Create(new JsonObject
             {
@@ -145,18 +147,18 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
     {
         var rows = await SearchReadAsync("pos.order",
             new JsonArray(Cond("config_id", "=", _configId)),
-            ["id", "name", "date_order", "state", "amount_total", "session_id"], ct, limit, "date_order desc, id desc");
+            ["id", "name", "date_order", "state", "amount_total", "session_id", "user_id"], ct, limit, "date_order desc, id desc");
 
         return rows.Select(r => new SaleSummaryDto(
             Int(r!["id"]), Str(r["name"]) ?? "", Date(r["date_order"]), Str(r["state"]) ?? "",
-            Dec(r["amount_total"]), Many2OneName(r["session_id"]))).ToList();
+            Dec(r["amount_total"]), Many2OneName(r["session_id"]), Many2OneName(r["user_id"]))).ToList();
     }
 
     public async Task<SaleDetailDto?> GetOrderAsync(int orderId, CancellationToken ct)
     {
         var rows = await SearchReadAsync("pos.order",
             new JsonArray(Cond("id", "=", orderId), Cond("config_id", "=", _configId)),
-            ["id", "name", "date_order", "state", "amount_total", "amount_tax", "amount_paid", "session_id"], ct, 1);
+            ["id", "name", "date_order", "state", "amount_total", "amount_tax", "amount_paid", "session_id", "user_id"], ct, 1);
         if (rows.Count == 0)
             return null;
 
@@ -168,7 +170,7 @@ public sealed class OdooPosGateway(OdooJson2Client odoo, IOptions<OdooOptions> o
 
         return new SaleDetailDto(
             Int(o["id"]), Str(o["name"]) ?? "", Date(o["date_order"]), Str(o["state"]) ?? "",
-            Many2OneName(o["session_id"]), Dec(o["amount_tax"]), Dec(o["amount_total"]), Dec(o["amount_paid"]),
+            Many2OneName(o["session_id"]), Many2OneName(o["user_id"]), Dec(o["amount_tax"]), Dec(o["amount_total"]), Dec(o["amount_paid"]),
             lines.Select(l => new SaleDetailLineDto(
                 Str(l!["full_product_name"]) ?? Many2OneName(l["product_id"]) ?? "",
                 Dec(l["qty"]), Dec(l["price_unit"]), Dec(l["discount"]),

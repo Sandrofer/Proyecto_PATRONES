@@ -4,44 +4,59 @@
 <PageTitle>Detalle de venta</PageTitle>
 
 <AuthGuard>
-    <section class="panel">
-        <header class="panel-head">
-            <h2>Venta @(sale?.Name ?? Id.ToString())</h2>
-            <a class="btn small" href="sales">Volver</a>
-        </header>
-        <Alert Message="@error" />
-        @if (sale is not null)
-        {
-            <p>
-                Id Odoo <strong>@sale.Id</strong> · @sale.DateOrderUtc.ToLocalTime().ToString("g") ·
-                sesión @sale.SessionName · estado <span class="badge">@sale.State</span>
-            </p>
-            <table class="table">
-                <thead><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Precio</th><th class="num">Desc. %</th><th class="num">Sin impuestos</th><th class="num">Con impuestos</th></tr></thead>
-                <tbody>
-                    @foreach (var l in sale.Lines)
-                    {
-                        <tr>
-                            <td>@l.ProductName</td>
-                            <td class="num">@l.Quantity.ToString("0.##")</td>
-                            <td class="num">@l.UnitPrice.ToString("N2")</td>
-                            <td class="num">@l.DiscountPercent.ToString("0.##")</td>
-                            <td class="num">@l.SubtotalWithoutTax.ToString("N2")</td>
-                            <td class="num">@l.SubtotalWithTax.ToString("N2")</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+    <a class="back" href="sales"><Icon Name="back" /> Volver al historial</a>
+    <Alert Message="@error" />
+    @if (sale is null && error is null)
+    {
+        <div class="empty"><span class="spinner dark"></span><p>Consultando Odoo…</p></div>
+    }
+    else if (sale is not null)
+    {
+        <section class="panel ticket">
+            <header class="ticket-head">
+                <span class="brand-mark"><Icon Name="coffee" Size="20" /></span>
+                <div>
+                    <h2>@sale.Name</h2>
+                    <p class="muted small">@sale.DateOrderUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm") · Id Odoo @sale.Id</p>
+                </div>
+                <span class="badge @Ui.StatusClass(sale.State)">@Ui.StatusLabel(sale.State)</span>
+            </header>
+
+            <div class="meta-row">
+                <div><span class="muted small">Cajero</span><strong>@(sale.CashierName ?? "—")</strong></div>
+                <div><span class="muted small">Sesión de caja</span><strong>@(sale.SessionName ?? "—")</strong></div>
+            </div>
+
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Producto</th><th class="num">Cant.</th><th class="num">Precio</th><th class="num">Desc.</th><th class="num">Sin IVA</th><th class="num">Con IVA</th></tr></thead>
+                    <tbody>
+                        @foreach (var l in sale.Lines)
+                        {
+                            <tr>
+                                <td>@l.ProductName</td>
+                                <td class="num">@Ui.Qty(l.Quantity)</td>
+                                <td class="num">@Ui.Money(l.UnitPrice)</td>
+                                <td class="num">@(l.DiscountPercent > 0 ? l.DiscountPercent.ToString("0.##") + " %" : "—")</td>
+                                <td class="num">@Ui.Money(l.SubtotalWithoutTax)</td>
+                                <td class="num"><strong>@Ui.Money(l.SubtotalWithTax)</strong></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
             <div class="totals">
-                <div><span>Impuestos</span><span>@sale.AmountTax.ToString("N2")</span></div>
-                <div class="grand"><span>Total</span><span>@sale.AmountTotal.ToString("N2")</span></div>
+                <div><span>Subtotal</span><span>@Ui.Money(sale.AmountTotal - sale.AmountTax)</span></div>
+                <div><span>IVA</span><span>@Ui.Money(sale.AmountTax)</span></div>
+                <div class="grand"><span>Total</span><span>@Ui.Money(sale.AmountTotal)</span></div>
                 @foreach (var p in sale.Payments)
                 {
-                    <div><span>Pago: @p.PaymentMethodName</span><span>@p.Amount.ToString("N2")</span></div>
+                    <div class="payment"><span>Pago · @p.PaymentMethodName</span><span>@Ui.Money(p.Amount)</span></div>
                 }
             </div>
-        }
-    </section>
+        </section>
+    }
 </AuthGuard>
 
 @code {

@@ -29,7 +29,6 @@ public static class DependencyContainer
         services.AddOptions<JwtOptions>().Bind(configuration.GetSection(JwtOptions.Section))
             .Validate(o => o.SigningKey.Length >= 32, "Jwt:SigningKey debe tener al menos 32 caracteres.")
             .ValidateOnStart();
-        services.Configure<OperatorsOptions>(configuration.GetSection(OperatorsOptions.Section));
         services.Configure<DiscountOptions>(configuration.GetSection(DiscountOptions.Section));
 
         services.AddHttpClient<OdooJson2Client>((sp, http) =>
@@ -37,7 +36,10 @@ public static class DependencyContainer
             var odoo = sp.GetRequiredService<IOptions<OdooOptions>>().Value;
             http.BaseAddress = new Uri(odoo.BaseUrl.TrimEnd('/') + "/");
             http.Timeout = TimeSpan.FromSeconds(odoo.TimeoutSeconds);
-        });
+        })
+        // No cookies: a cashier's login must not leave an Odoo session that
+        // would be mixed with the API key calls.
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { UseCookies = false });
         services.AddScoped<IPosGateway, OdooPosGateway>();
         services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
 
@@ -56,7 +58,7 @@ public static class DependencyContainer
 
         services.AddHttpContextAccessor();
         services.AddSingleton(TimeProvider.System);
-        services.AddSingleton<IOperatorDirectory, ConfiguredOperatorDirectory>();
+        services.AddScoped<IOperatorDirectory, OdooOperatorDirectory>();
         services.AddSingleton<ITokenIssuer, JwtTokenIssuer>();
         services.AddScoped<ICurrentOperator, HttpContextCurrentOperator>();
         return services;

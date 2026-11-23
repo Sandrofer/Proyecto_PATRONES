@@ -57,4 +57,4 @@ Write-Host "  POS:      $($result.pos_config_id)  sesión $($result.pos_session_
 Write-Host "  Efectivo: método de pago $($result.cash_payment_method_id)"
 Write-Host "  Productos: $($result.products | ConvertTo-Json -Compress)"
 Write-Host "  API key guardada en user-secrets (no en el repositorio)."
-Write-Host "Si aún no hay cajeros, ejecute: scripts\add-operator.ps1 -Username cajero1 -DisplayName 'Cajero 1'"
+Write-Host "Cajeros: créelos en Odoo (Ajustes > Usuarios) con permiso 'Punto de venta / Usuario'."

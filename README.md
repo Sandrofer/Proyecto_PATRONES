@@ -15,7 +15,7 @@ El frontend **nunca** habla con Odoo; la API key de Odoo solo existe en el backe
 |---|---|
 | `backend/src/Pos.Domain` | Venta (agregado), líneas, impuestos, políticas de descuento (Strategy). Sin dependencias. |
 | `backend/src/Pos.Application` | Casos de uso (input ports + interactors) y puertos de salida (`IPosGateway`, `IIdempotencyStore`…). |
-| `backend/src/Pos.Infrastructure` | Adaptador de Odoo JSON-2, idempotencia, JWT, operadores. |
+| `backend/src/Pos.Infrastructure` | Adaptador de Odoo JSON-2, cajeros (usuarios de Odoo), idempotencia, JWT. |
 | `backend/src/Pos.Api` | Endpoints REST, ProblemDetails, CORS, composición (DI). |
 | `backend/src/Pos.Shared` | Contratos (DTOs) compartidos con el frontend. |
 | `frontend/src/Pos.Frontend.Domain` | Carrito y total provisional (C# puro). |
@@ -36,9 +36,14 @@ El frontend **nunca** habla con Odoo; la API key de Odoo solo existe en el backe
 
 ```powershell
 cd C:\dev\pos-odoo
-.\scripts\odoo-setup.ps1                                   # Odoo + datos + API key (tarda ~3 min la 1.ª vez)
-.\scripts\add-operator.ps1 -Username cajero1 -DisplayName "Cajero 1"   # pide la contraseña
+.\scripts\odoo-setup.ps1        # Odoo + datos + API key (tarda ~3 min la 1.ª vez)
 ```
+
+**Cajeros = usuarios de Odoo.** Créelos en Odoo (`http://localhost:8069`, usuario `admin`):
+**Ajustes → Usuarios → Nuevo**, con nombre, usuario y contraseña, y en *Punto de venta* el
+permiso **Usuario**. Para quitar el acceso basta con archivar el usuario o quitarle ese permiso.
+La API valida la contraseña con Odoo, comprueba el grupo `point_of_sale.group_pos_user`
+(sin él responde 403) y registra cada venta a nombre del cajero (`user_id` del pedido).
 
 `odoo-setup.ps1` crea (sin duplicar si se repite): impuesto **IVA 15 %**, 4 productos vendibles
 (+1 retirado para la prueba P04) con stock, método de pago **Efectivo**, el punto de venta
@@ -63,7 +68,7 @@ Muestra la IP que debe usar el frontend, por ejemplo `http://192.168.1.20:5100`.
 ```powershell
 .\scripts\frontend-start.ps1 -ApiUrl http://192.168.1.20:5100
 ```
-Abra **http://localhost:5200** e inicie sesión con el cajero creado.
+Abra **http://localhost:5200** e inicie sesión con un usuario de Odoo que tenga permiso de Punto de venta.
 
 Odoo (administración): `http://IP-BACKEND:8069`. Si la sesión POS se cerró en Odoo, vuelva a
 ejecutar `.\scripts\odoo-setup.ps1` (abre una sesión nueva).
@@ -77,7 +82,6 @@ ejecutar `.\scripts\odoo-setup.ps1` (abre una sesión nueva).
 | `Odoo:ApiKey` | **user-secrets** | API key del usuario de integración |
 | `Odoo:PosConfigId` | user-secrets | id del punto de venta |
 | `Jwt:SigningKey` | **user-secrets** | clave de firma de los tokens (≥ 32 caracteres) |
-| `Operators:Accounts` | **user-secrets** | cajeros (solo hash PBKDF2 de la contraseña) |
 | `Cors:AllowedOrigins` | appsettings.json | `["*"]` o la URL del frontend |
 | `Discounts:*` | appsettings.json | máximo manual, % estudiante, volumen |
 

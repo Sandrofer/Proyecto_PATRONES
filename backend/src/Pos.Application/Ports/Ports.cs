@@ -37,7 +37,8 @@ public sealed record OrderSubmission(
     SaleTotals Totals,
     PosSession Session,
     PaymentMethod PaymentMethod,
-    string OperatorName);
+    string OperatorName,
+    int? OperatorUserId);
 
 public sealed record RegisteredOrder(int Id, string Name, string State, decimal AmountTotal);
 
@@ -55,13 +56,20 @@ public interface IIdempotencyStore
 public interface ICurrentOperator
 {
     string Name { get; }
+    // Id of the cashier's user in Odoo; the sale is registered in their name.
+    int? OdooUserId { get; }
 }
 
-public sealed record Operator(string Username, string DisplayName);
+// A cashier. Cashiers are Odoo users with Point of Sale rights.
+public sealed record Operator(int OdooUserId, string Username, string DisplayName);
 
+// Where cashiers are registered and validated (Odoo in this project).
 public interface IOperatorDirectory
 {
-    Operator? ValidateCredentials(string username, string password);
+    // Returns null when the credentials are wrong.
+    // Throws OperatorNotAuthorizedException when they are right but the user
+    // has no Point of Sale rights.
+    Task<Operator?> ValidateCredentialsAsync(string username, string password, CancellationToken ct);
 }
 
 public interface ITokenIssuer

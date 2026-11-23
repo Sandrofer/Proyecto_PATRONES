@@ -54,9 +54,16 @@ mecanismo (p. ej. XML-RPC o un módulo propio) solo toca el adaptador. − Un ma
 - Odoo recalcula el total y exige pago exacto; la compañía usa `round_globally`, así que el
   dominio aplica el mismo modo de redondeo que lee de Odoo (`TaxRoundingMode`).
 
-**Código.** `Pos.Application/Ports/Ports.cs`, `Pos.Infrastructure/Odoo/OdooPosGateway.cs`, `OdooJson2Client.cs`.
+**Cajeros en Odoo (mismo principio).** Los cajeros son usuarios de Odoo: el caso de uso de login
+solo depende del puerto `IOperatorDirectory`; el adaptador `OdooOperatorDirectory` valida la
+contraseña con Odoo (`/web/session/authenticate`, sin guardar cookies) y comprueba el grupo
+`point_of_sale.group_pos_user` con `res.users.has_group`. Así no se duplica la gestión de usuarios
+(Odoo es el sistema central) y cada pedido queda con el `user_id` del cajero. Se cambió desde una
+lista local de cajeros sin tocar Domain ni las reglas de venta: solo el adaptador.
 
-**Prueba.** `OdooPosGatewayTests` (contrato JSON-2 con Odoo simulado), `Pos.IntegrationTests` (P09 real).
+**Código.** `Pos.Application/Ports/Ports.cs`, `Pos.Infrastructure/Odoo/OdooPosGateway.cs`, `OdooJson2Client.cs`, `OdooOperatorDirectory.cs`.
+
+**Prueba.** `OdooPosGatewayTests` y `OdooOperatorDirectoryTests` (contrato con Odoo simulado), `LoginTests`, `Pos.IntegrationTests` (P09 real).
 
 ---
 

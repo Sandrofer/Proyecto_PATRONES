@@ -81,6 +81,55 @@ public sealed class OdooJson2Client(HttpClient http, IOptions<OdooOptions> optio
         }
     }
 
+    // Checks a user's login and password with Odoo (JSON-RPC session
+    // authentication; JSON-2 only accepts API keys). Returns the Odoo user id,
+    // or null when the credentials are wrong. No session is kept: the
+    // HttpClient is configured without cookies.
+    public async Task<int?> AuthenticateAsync(string login, string password, CancellationToken ct)
+    {
+        string json = JsonSerializer.Serialize(new
+        {
+            jsonrpc = "2.0",
+            @params = new { db = _options.Database, login, password }
+        });
+        using var request = new HttpRequestMessage(HttpMethod.Post, "web/session/authenticate")
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await http.SendAsync(request, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new ExternalServiceUnavailableException("No se pudo comunicar con Odoo.", ex);
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new ExternalServiceUnavailableException("Odoo no respondió a tiempo.", ex);
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+                throw new ExternalServiceUnavailableException("Odoo no está disponible en este momento.");
+
+            var body = JsonNode.Parse(await response.Content.ReadAsStringAsync(ct));
+            var error = body?["error"];
+            if (error is not null)
+            {
+                if (error["data"]?["name"]?.GetValue<string>() == "odoo.exceptions.AccessDenied")
+                    return null;
+                logger.LogWarning("Odoo authentication error: {Error}", Truncate(error.ToJsonString()));
+                throw new ExternalServiceRejectedException("Odoo no pudo validar el usuario.");
+            }
+
+            return body?["result"]?["uid"] is JsonValue uid && uid.TryGetValue<int>(out int id) ? id : null;
+        }
+    }
+
     public static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = null

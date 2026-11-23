@@ -88,7 +88,8 @@ public sealed record SaleSummaryDto(
     DateTime DateOrderUtc,
     string State,
     decimal AmountTotal,
-    string? SessionName);
+    string? SessionName,
+    string? CashierName);
 
 public sealed record SaleDetailLineDto(
     string ProductName,
@@ -106,6 +107,7 @@ public sealed record SaleDetailDto(
     DateTime DateOrderUtc,
     string State,
     string? SessionName,
+    string? CashierName,
     decimal AmountTax,
     decimal AmountTotal,
     decimal AmountPaid,

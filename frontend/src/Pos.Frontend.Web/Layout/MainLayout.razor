@@ -3,18 +3,27 @@
 @inject CheckoutUseCase Checkout
 @inject NavigationManager Nav
 
-<header class="topbar">
-    <span class="brand">☕ POS · Odoo 20</span>
-    @if (Auth.IsAuthenticated)
-    {
-        <nav>
-            <NavLink href="" Match="NavLinkMatch.All">Vender</NavLink>
-            <NavLink href="sales">Historial</NavLink>
+@if (Auth.IsAuthenticated)
+{
+    <header class="topbar">
+        <a class="brand" href="">
+            <span class="brand-mark"><Icon Name="coffee" Size="20" /></span>
+            <span>Cafetería UTA <small>POS · Odoo 20</small></span>
+        </a>
+        <nav class="tabs">
+            <NavLink href="" Match="NavLinkMatch.All"><Icon Name="store" /> Vender</NavLink>
+            <NavLink href="sales"><Icon Name="history" /> Historial</NavLink>
         </nav>
-        <span class="user">@Auth.OperatorName <button class="btn small" @onclick="LogoutAsync">Salir</button></span>
-    }
-</header>
-<main class="content">
+        <div class="user">
+            <span class="avatar">@Ui.Initials(Auth.OperatorName ?? "?")</span>
+            <span class="user-name">@Auth.OperatorName</span>
+            <button class="btn ghost-light small" @onclick="LogoutAsync" title="Cerrar sesión">
+                <Icon Name="logout" /> <span class="hide-sm">Salir</span>
+            </button>
+        </div>
+    </header>
+}
+<main class="@(Auth.IsAuthenticated ? "content" : "content bare")">
     @Body
 </main>
 
