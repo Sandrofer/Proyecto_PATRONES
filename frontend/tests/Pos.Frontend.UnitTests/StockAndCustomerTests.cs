@@ -108,3 +108,16 @@ public class CartWholeQuantityTests
     public void Cart_rejects_adding_a_fractional_quantity() =>
         Assert.ThrowsAny<ArgumentException>(() => new Cart().Add(Coffee, 0.5m));
 }
+
+public class LoginInputTests
+{
+    [Fact]
+    public async Task Login_with_special_characters_is_rejected_in_the_browser()
+    {
+        var api = Substitute.For<IPosApi>();
+        var error = await new LoginUseCase(api, Substitute.For<IAuthSession>()).ExecuteAsync("!\"#*", "x");
+
+        Assert.Equal(InputRules.UsernameCharactersMessage, error);
+        await api.DidNotReceiveWithAnyArgs().LoginAsync(default!);
+    }
+}

@@ -110,8 +110,8 @@ Errores en formato ProblemDetails, en español.
 ## Pruebas
 
 ```powershell
-cd backend;  dotnet test tests\Pos.UnitTests                 # 72 pruebas: dominio, casos de uso, adaptador Odoo, login, stock, cédula, arquitectura
-cd frontend; dotnet test tests\Pos.Frontend.UnitTests        # 24 pruebas: carrito (P07), errores de la API (P08), checkout, stock, cliente
+cd backend;  dotnet test tests\Pos.UnitTests                 # 91 pruebas: dominio, casos de uso, adaptador Odoo, login, stock, cédula, arquitectura
+cd frontend; dotnet test tests\Pos.Frontend.UnitTests        # 25 pruebas: carrito (P07), errores de la API (P08), checkout, stock, cliente
 
 # P09 con Odoo REAL (crea 1 venta en Odoo):
 cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
@@ -131,6 +131,7 @@ cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
 | P10 | Nueva política de descuento sin tocar otros componentes | `DiscountExtensibilityTests` |
 | Extra | No vender más que el stock de Odoo (RN-09) | `StockTests`, `frontend/.../CartStockTests` |
 | Extra | Cliente con cédula ecuatoriana válida (RN-10) | `CustomerTests`, `frontend/.../CheckoutCustomerTests` |
+| Extra | Caracteres especiales, usuario y decimales del descuento | `InputRulesTests`, `frontend/.../LoginInputTests` |
 | Extra | Cantidades enteras (RN-11) | `WholeQuantityTests`, `frontend/.../CartWholeQuantityTests` |
 | Extra | Login con usuarios de Odoo y permiso de POS | `LoginTests`, `OdooOperatorDirectoryTests` |
 
@@ -144,6 +145,15 @@ cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
   nombre de solo letras (3–80). El cliente se busca en Odoo por cédula (`res.partner.vat`) o se crea
   ahí, y la venta queda con su `partner_id`. Para crear clientes, el usuario de integración tiene el
   permiso *Creación de contactos* (lo asigna `odoo-setup.ps1`).
+- **Validación de entradas (RNF-09).** Reglas compartidas por API y navegador (`Pos.Shared/InputRules.cs`):
+  la búsqueda de productos y el filtro del historial solo admiten letras (con tildes y ñ), números,
+  espacios y `- . _ /` (máx. 50); el usuario del login solo letras, números y `. _ - @`. Con otros
+  caracteres (`!"#*<>%'`...) la API responde 400 sin consultar Odoo.
+- **Descuentos (RF-06/07/08, RN-04).** Solo políticas habilitadas; la manual exige un número mayor
+  que 0, hasta el máximo autorizado (10 %) y con 2 decimales como máximo. Una política inexistente
+  o un porcentaje no autorizado se rechazan con un mensaje comprensible.
+- **Método de pago (RF-11).** Debe estar configurado en la sesión POS abierta de Odoo y ser de
+  efectivo; cualquier otro id se rechaza (400).
 - **RN-11 Cantidades enteras.** Los productos se venden por unidad: no se acepta 1,5 cafés.
   El carrito lo impide y la API responde 400 indicando la línea (`lines[i].quantity`).
 

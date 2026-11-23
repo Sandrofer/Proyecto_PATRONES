@@ -16,6 +16,10 @@ public sealed class LoginInteractor(IOperatorDirectory operators, ITokenIssuer t
     {
         if (string.IsNullOrWhiteSpace(request?.Username) || string.IsNullOrWhiteSpace(request.Password))
             throw ValidationException.For("credentials", "Ingrese usuario y contraseña.");
+        if (InputRules.ValidateUsername(request.Username) is string error)
+            throw ValidationException.For("username", error);
+        if (request.Password.Length > 100)
+            throw ValidationException.For("password", "La contraseña es demasiado larga.");
 
         var op = await operators.ValidateCredentialsAsync(request.Username.Trim(), request.Password, ct)
             ?? throw new AuthenticationFailedException();

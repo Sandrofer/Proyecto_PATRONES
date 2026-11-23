@@ -45,6 +45,8 @@ public sealed class ManualPercentageDiscountPolicy(decimal maxPercent) : IDiscou
             return DiscountDecision.Reject("Indique el porcentaje del descuento manual.");
         if (percent <= 0)
             return DiscountDecision.Reject("El porcentaje de descuento debe ser mayor que cero.");
+        if (decimal.Round(percent, 2) != percent)
+            return DiscountDecision.Reject("El porcentaje de descuento admite como máximo 2 decimales.");
         if (percent > maxPercent)
             return DiscountDecision.Reject(
                 $"El descuento de {percent:0.##} % no está autorizado: el máximo permitido es {maxPercent:0.##} %.");

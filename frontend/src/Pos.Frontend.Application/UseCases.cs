@@ -9,6 +9,8 @@ public sealed class LoginUseCase(IPosApi api, IAuthSession session)
     {
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
             return "Ingrese usuario y contraseña.";
+        if (InputRules.ValidateUsername(username) is string usernameError)
+            return usernameError;
 
         var result = await api.LoginAsync(new LoginRequest(username.Trim(), password));
         if (!result.IsSuccess)

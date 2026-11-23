@@ -12,13 +12,12 @@ public interface ISearchProductsInputPort
 public sealed class SearchProductsInteractor(IPosGateway gateway) : ISearchProductsInputPort
 {
     const int MaxResults = 40;
-    const int MaxSearchLength = 100;
 
     public async Task<IReadOnlyList<ProductDto>> HandleAsync(string? search, CancellationToken ct)
     {
         string? term = search?.Trim();
-        if (term?.Length > MaxSearchLength)
-            throw ValidationException.For("search", $"La búsqueda admite como máximo {MaxSearchLength} caracteres.");
+        if (InputRules.ValidateSearch(term) is string error)
+            throw ValidationException.For("search", error);
 
         var products = await gateway.SearchProductsAsync(string.IsNullOrEmpty(term) ? null : term, MaxResults, ct);
         return products.Where(p => p.AvailableInPos).Select(ToDto).ToList();

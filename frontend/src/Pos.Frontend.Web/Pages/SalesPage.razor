@@ -20,8 +20,9 @@
         </header>
         <div class="search">
             <Icon Name="search" Class="search-icon" />
-            <input @bind="filter" @bind:event="oninput" placeholder="Buscar por comprobante, cliente o cajero…" aria-label="Buscar venta" />
+            <input @bind="filter" @bind:event="oninput" maxlength="@InputRules.MaxSearchLength" placeholder="Buscar por comprobante, cliente o cajero…" aria-label="Buscar venta" />
         </div>
+        <Alert Message="@FilterError" Kind="warn" />
         <Alert Message="@error" />
         @if (loading)
         {
@@ -61,7 +62,10 @@
     string? error, filter;
     bool loading;
 
-    List<SaleSummaryDto> Filtered => string.IsNullOrWhiteSpace(filter)
+    string? FilterError => InputRules.ValidateSearch(filter);
+
+    // An invalid filter shows a warning and leaves the list unfiltered.
+    List<SaleSummaryDto> Filtered => string.IsNullOrWhiteSpace(filter) || FilterError is not null
         ? sales
         : sales.Where(s => s.Name.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase)
                            || (s.CustomerName?.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase) ?? false)
