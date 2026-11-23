@@ -102,6 +102,7 @@ Cualquier clave puede darse también como variable de entorno (`Odoo__ApiKey`, e
 | GET | `/api/sales` | Historial |
 | GET | `/api/sales/{id}` | Detalle |
 | GET | `/api/customers/{cedula}` | Busca un cliente en Odoo por cédula (400 si la cédula no es válida, 404 si no existe) |
+| GET | `/api/status` | Estado de la integración: Odoo disponible y sesión de caja abierta (siempre 200; "Odoo caído" es una respuesta, no un error) |
 
 Respuestas de `POST /api/sales`: **201** registrada · **200** ya estaba registrada (misma clave) ·
 **202** resultado incierto (Odoo no respondió: reintentar con la misma clave) · **400** datos
@@ -111,8 +112,8 @@ Errores en formato ProblemDetails, en español.
 ## Pruebas
 
 ```powershell
-cd backend;  dotnet test tests\Pos.UnitTests                 # 113 pruebas: dominio, casos de uso, adaptador Odoo, login, stock, cédula, arquitectura
-cd frontend; dotnet test tests\Pos.Frontend.UnitTests        # 44 pruebas: carrito (P07), errores de la API (P08), checkout, stock, cliente
+cd backend;  dotnet test tests\Pos.UnitTests                 # 116 pruebas: dominio, casos de uso, adaptador Odoo, login, stock, cédula, arquitectura
+cd frontend; dotnet test tests\Pos.Frontend.UnitTests        # 50 pruebas: carrito (P07), errores de la API (P08), checkout, stock, cliente
 
 # P09 con Odoo REAL (crea 1 venta en Odoo):
 cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
@@ -134,6 +135,7 @@ cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
 | Extra | Cliente con cédula ecuatoriana válida (RN-10) | `CustomerTests`, `frontend/.../CheckoutCustomerTests` |
 | Extra | Condiciones de cada descuento y límites de la venta | `DiscountRulesTests`, `frontend/.../DiscountValidationTests` |
 | Extra | Efectivo recibido y vuelto | `CashTenderTests` (backend y frontend) |
+| Extra | Aviso de Odoo caído y recuperación | `ConnectivityTests` (frontend), `SystemStatusTests` |
 | Extra | Caracteres especiales, usuario y decimales del descuento | `InputRulesTests`, `frontend/.../LoginInputTests` |
 | Extra | Cantidades enteras (RN-11) | `WholeQuantityTests`, `frontend/.../CartWholeQuantityTests` |
 | Extra | Login con usuarios de Odoo y permiso de POS | `LoginTests`, `OdooOperatorDirectoryTests` |
@@ -169,9 +171,21 @@ cd backend; $env:POS_RUN_INTEGRATION="1"; dotnet test tests\Pos.IntegrationTests
   total y dejar un vuelto de hasta $ 100 (evita errores como 500 en vez de 5,00). La pantalla
   muestra el vuelto al instante; Odoo guarda el pago recibido y la línea de cambio, como su propio
   POS (pago $ 5,00, vuelto −$ 2,93).
+- **Odoo caído (RN-07).** Indicador en la barra superior (verde / rojo / ámbar si la caja está
+  cerrada). Cualquier respuesta 503 o fallo de red lo pone en rojo al instante y una revisión de
+  `GET /api/status` cada 20 s (cada 5 s mientras está caído) lo detecta aunque el cajero no haga
+  nada. Mientras está caído: aviso en toda la pantalla con la hora del corte y *Reintentar ahora*,
+  el carrito se conserva y *Cobrar* queda bloqueado. Al volver, aviso verde y, si había un cobro
+  pendiente, se pide pulsar *Reintentar* (misma clave: no duplica).
+- **Comprobante imprimible.** *Imprimir* tras cobrar y *Imprimir comprobante* en el detalle:
+  ticket de 80 mm (también A4) con los datos de la empresa de Odoo, cliente o consumidor final
+  (9999999999), líneas, IVA, total, efectivo recibido y vuelto. Es un comprobante sin validez
+  tributaria: la factura electrónica SRI está fuera del alcance (sección 12 del enunciado).
 - **RN-11 Cantidades enteras.** Los productos se venden por unidad: no se acepta 1,5 cafés.
   El carrito lo impide y la API responde 400 indicando la línea (`lines[i].quantity`).
 
 Verificación manual realizada contra Odoo 20 (`20.0-20261112`): venta registrada como `paid`,
 pago en efectivo, stock descontado, reenvío con la misma clave (también tras reiniciar la API)
-sin duplicar, dos peticiones simultáneas (una recibe 409) y Odoo apagado (503, sin éxito falso).
+sin duplicar, dos peticiones simultáneas (una recibe 409) y Odoo apagado (503, sin éxito falso). Con la pantalla abierta, `docker stop pos-odoo-web`
+muestra el aviso en unos 8 s y bloquea el cobro; `docker start pos-odoo-web` lo recupera solo
+cuando Odoo termina de arrancar (unos 30 s).

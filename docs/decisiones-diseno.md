@@ -194,6 +194,37 @@ en ambos lados.
 **Prueba.** `InputRulesTests`, `StockAndCustomerTests`, `DiscountValidationTests`, y la revisión en
 navegador de 32 casos de entrada inválida (ver README, "Cómo probar").
 
+---
+
+## D8. Detectar la caída de Odoo en el navegador — *Health Check* + *Observer*
+
+**Problema.** RN-07 / RF-17: si Odoo se cae, el cajero no debe descubrirlo al pulsar *Cobrar*
+ni recibir un éxito falso. Cada pantalla mostraba su propio error, pero nada avisaba en general
+ni impedía seguir intentando.
+
+**Alternativas.**
+1. Que cada página interprete sus errores: el estado quedaría repetido y desincronizado.
+2. Solo una revisión periódica: tarda hasta un intervalo en notar el corte.
+3. **Un estado único (`ConnectivityState`) alimentado por dos fuentes** y observado por la UI.
+
+**Elección.** El backend expone `GET /api/status` (*Health Check*): consulta la sesión de caja en
+Odoo y responde siempre 200 con `OdooAvailable`/`SessionOpen`, porque "Odoo caído" es un dato,
+no un error del endpoint. En el frontend:
+- `HttpPosApi` informa **cada respuesta** a `ConnectivityState.Observe` (503 → Odoo caído, sin
+  respuesta → API caída, éxito de un endpoint que usa Odoo → recuperado);
+- `SystemStatusUseCase` consulta `/api/status` cada 20 s, o cada 5 s mientras está caído;
+- `ConnectivityState` publica el evento `Changed` (*Observer*): la barra superior y la pantalla de
+  venta se actualizan solas y *Cobrar* usa `ChargeBlockedReason`.
+
+**Consecuencias.** + El aviso aparece con la primera petición fallida o, sin actividad, en el
+siguiente chequeo; la recuperación es automática. + Los casos de uso no saben nada de esto: la
+idempotencia (D3) sigue garantizando que reintentar no duplica. − Una petición liviana cada 20 s
+por caja abierta; − el estado vive en memoria de cada navegador (suficiente para una caja).
+
+**Código.** `GetSystemStatusInteractor.cs`, `frontend/.../Connectivity.cs`, `HttpPosApi.cs`,
+`MainLayout.razor`. **Prueba.** `SystemStatusTests`, `ConnectivityTests` y la prueba real con
+`docker stop/start pos-odoo-web` (aviso en ~8 s, recuperación sola).
+
 ## Diagramas
 
 Componentes, capas y secuencia del cobro: ver [diagramas.md](diagramas.md).
